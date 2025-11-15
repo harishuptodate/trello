@@ -20,7 +20,7 @@ import type { Board, ColumnWithTasks, Task } from '@/lib/supabase/models';
 import { DialogTitle, DialogTrigger } from '@radix-ui/react-dialog';
 import { Calendar, MoreHorizontal, Plus, User } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import {
 	DndContext,
 	DragEndEvent,
@@ -194,12 +194,7 @@ function SortableTask({ task }: { task: Task }) {
 		}
 	}
 	return (
-		<div
-			ref={setNodeRef}
-			{...attributes}
-			{...listeners}
-			style={styles}
-			data-sortable-id={task.id}>
+		<div ref={setNodeRef} {...attributes} {...listeners} style={styles}>
 			<Card className="cursor-pointer hover:shadow-md transition-shadow">
 				<CardContent className="">
 					<div className="space-y-1 sm:space-y-2">
@@ -342,12 +337,6 @@ export default function BoardPage() {
 		dueDate: null as string | null,
 		assignee: [] as string[],
 	});
-
-	// Drag-to-scroll functionality
-	const scrollContainerRef = useRef<HTMLDivElement>(null);
-	const [isDraggingScroll, setIsDraggingScroll] = useState(false);
-	const [startX, setStartX] = useState(0);
-	const [scrollLeft, setScrollLeft] = useState(0);
 
 	const sensors = useSensors(
 		useSensor(PointerSensor, {
@@ -529,88 +518,6 @@ export default function BoardPage() {
 		});
 	}
 
-	// Drag-to-scroll handlers
-	const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-		// Only start drag-to-scroll if clicking on the container itself, not on interactive elements
-		const target = e.target as HTMLElement;
-		if (
-			target.closest('button') ||
-			target.closest('[role="button"]') ||
-			target.closest('input') ||
-			target.closest('textarea') ||
-			target.closest('select') ||
-			target.closest('[data-draggable]') ||
-			target.closest('[data-sortable-id]')
-		) {
-			return;
-		}
-
-		// Only enable drag-to-scroll on large screens (lg breakpoint)
-		if (window.innerWidth < 1024) {
-			return;
-		}
-
-		if (scrollContainerRef.current) {
-			setIsDraggingScroll(true);
-			const rect = scrollContainerRef.current.getBoundingClientRect();
-			setStartX(e.pageX - rect.left);
-			setScrollLeft(scrollContainerRef.current.scrollLeft);
-			scrollContainerRef.current.style.userSelect = 'none';
-		}
-	};
-
-	const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-		if (!isDraggingScroll || !scrollContainerRef.current) return;
-		e.preventDefault();
-		const rect = scrollContainerRef.current.getBoundingClientRect();
-		const x = e.pageX - rect.left;
-		const walk = (x - startX) * 2; // Scroll speed multiplier
-		scrollContainerRef.current.scrollLeft = scrollLeft - walk;
-	};
-
-	const handleMouseUp = () => {
-		if (scrollContainerRef.current) {
-			setIsDraggingScroll(false);
-			scrollContainerRef.current.style.userSelect = '';
-		}
-	};
-
-	const handleMouseLeave = () => {
-		if (scrollContainerRef.current) {
-			setIsDraggingScroll(false);
-			scrollContainerRef.current.style.userSelect = '';
-		}
-	};
-
-	// Global mouse event handlers for drag-to-scroll
-	useEffect(() => {
-		const handleGlobalMouseMove = (e: MouseEvent) => {
-			if (!isDraggingScroll || !scrollContainerRef.current) return;
-			e.preventDefault();
-			const rect = scrollContainerRef.current.getBoundingClientRect();
-			const x = e.pageX - rect.left;
-			const walk = (x - startX) * 2;
-			scrollContainerRef.current.scrollLeft = scrollLeft - walk;
-		};
-
-		const handleGlobalMouseUp = () => {
-			if (scrollContainerRef.current) {
-				setIsDraggingScroll(false);
-				scrollContainerRef.current.style.userSelect = '';
-			}
-		};
-
-		if (isDraggingScroll) {
-			document.addEventListener('mousemove', handleGlobalMouseMove);
-			document.addEventListener('mouseup', handleGlobalMouseUp);
-		}
-
-		return () => {
-			document.removeEventListener('mousemove', handleGlobalMouseMove);
-			document.removeEventListener('mouseup', handleGlobalMouseUp);
-		};
-	}, [isDraggingScroll, startX, scrollLeft]);
-
 	// filter columns
 	const filteredColumns = columns.map((column) => ({
 		...column,
@@ -628,7 +535,7 @@ export default function BoardPage() {
 					return false;
 				}
 			}
-
+			
 			return true;
 		}),
 	}));
@@ -876,15 +783,7 @@ export default function BoardPage() {
 						onDragStart={handleDragStart}
 						onDragOver={handleDragOver}
 						onDragEnd={handleDragEnd}>
-						<div
-							ref={scrollContainerRef}
-							onMouseDown={handleMouseDown}
-							onMouseMove={handleMouseMove}
-							onMouseUp={handleMouseUp}
-							onMouseLeave={handleMouseLeave}
-							className={`flex flex-col lg:flex-row lg:space-x-6 lg:overflow-x-auto lg:pb-6 lg:px-2 lg:mx-2 lg:[&::-webkit-scrollbar]:h-2 lg:[&::-webkit-scrollbar-track]:bg-gray-100 lg:[&::-webkit-scrollbar-thumb]:bg-gray-300 lg:[&::-webkit-scrollbar-thumb]:rounded-full space-y-4 lg:space-y-0 ${
-								isDraggingScroll ? 'lg:cursor-grabbing' : 'lg:cursor-grab'
-							}`}>
+						<div className="flex flex-col lg:flex-row lg:space-x-6 lg:overflow-x-auto lg:pb-6 lg:px-2 lg:mx-2 lg:[&::-webkit-scrollbar]:h-2 lg:[&::-webkit-scrollbar-track]:bg-gray-100 lg:[&::-webkit-scrollbar-thumb]:bg-gray-300 lg:[&::-webkit-scrollbar-thumb]:rounded-full space-y-4 lg:space-y-0">
 							{filteredColumns.map((column, key) => (
 								<DroppableColumn
 									key={key}
