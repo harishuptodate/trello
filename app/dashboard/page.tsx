@@ -162,17 +162,19 @@ export default function DashboardPage() {
 
 	if (loading) {
 		return (
-			<div>
-				<Loader2 className="animate-spin" />
-				<span>Loading your boards...</span>
+			<div className="flex items-center justify-center h-screen gap-2">
+				<Loader2 className="animate-spin h-10 w-10 text-blue-600" />
+				<span className="text-lg font-medium text-gray-900">Loading your boards...</span>
 			</div>
 		);
 	}
 	if (error) {
-		<div>
-			<h2>Error loading boards</h2>
-			<p>{error}</p>
-		</div>;
+		return (
+			<div className="flex items-center justify-center h-screen gap-2">
+				<Loader2 className="animate-spin h-10 w-10 text-blue-600" />
+				<span className="text-lg font-medium text-gray-900">Error loading boards</span>
+			</div>
+		);
 	}
 
 	return (

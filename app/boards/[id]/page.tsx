@@ -268,7 +268,7 @@ function TaskForm({
 												completed: e.target.checked,
 											})
 										}
-										className="w-4= h-4 text-blue-600 rounded focus:ring-blue-500 flex-shrink-0"
+										className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 flex-shrink-0"
 									/>
 									<Input
 										value={item.item}
