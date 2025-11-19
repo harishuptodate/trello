@@ -164,7 +164,9 @@ export default function DashboardPage() {
 		return (
 			<div className="flex items-center justify-center h-screen gap-2">
 				<Loader2 className="animate-spin h-10 w-10 text-blue-600" />
-				<span className="text-lg font-medium text-gray-900">Loading your boards...</span>
+				<span className="text-lg font-medium text-gray-900">
+					Loading your boards...
+				</span>
 			</div>
 		);
 	}
@@ -172,23 +174,31 @@ export default function DashboardPage() {
 		return (
 			<div className="flex items-center justify-center h-screen gap-2">
 				<Loader2 className="animate-spin h-10 w-10 text-blue-600" />
-				<span className="text-lg font-medium text-gray-900">Error loading boards</span>
+				<span className="text-lg font-medium text-gray-900">
+					Error loading boards
+				</span>
 			</div>
 		);
 	}
 
 	return (
 		<div className="min-h-screen bg-gray-50">
-			<Navbar />
-			<main className="container mx-auto px-4 py-6 sm:py-8">
-				<div className="mb-6 sm:mb-8">
-					<h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+			<Navbar
+				searchValue={filters.search}
+				onSearchChange={(value) =>
+					setFilters((prev) => ({ ...prev, search: value }))
+				}
+				onCreateBoardClick={() => setIsCreateDialogOpen(true)}
+			/>
+			<main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+				<div className="mb-4 sm:mb-6">
+					<h1 className="text-xl sm:text-2xl font-bold text-gray-900">
 						Welcome back,{' '}
 						{user?.firstName ??
 							user?.emailAddresses[0].emailAddress.split('@')[0]}
 						! 👋
 					</h1>
-					<p className="text-gray-600">
+					<p className="text-sm text-gray-600">
 						Here's whats's hapening with your boards today.
 					</p>
 				</div>
@@ -273,30 +283,18 @@ export default function DashboardPage() {
 					</Card>
 				</div> */}
 				{/* Boards */}
-				<div className="mb-6 sm:mb-8">
-					{/* 
-						CHANGES MADE:
-						1. Changed parent div to use "flex flex-col sm:flex-row" - makes it stack vertically on mobile, horizontal on larger screens
-						2. Added "sm:items-center" - vertically centers items on larger screens
-						3. Added "sm:justify-between" - pushes title to left and buttons to right on larger screens
-						4. Added "gap-4" - consistent spacing between elements
-					*/}
+				<div className="mb-4 sm:mb-6">
 					<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-4">
 						<div>
-							<h2 className="text-xl sm:text-2xl font-bold text-gray-900">
+							<h2 className="text-lg sm:text-xl font-bold text-gray-900">
 								Your Boards
 							</h2>
-							<p className="text-gray-600">Manage your projects and tasks</p>
+							<p className="text-sm text-gray-600">
+								Manage your projects and tasks
+							</p>
 						</div>
-						{/* 
-							CHANGES MADE:
-							1. Wrapped buttons in a new div with "flex flex-col sm:flex-row" - stacks buttons vertically on mobile, horizontally on larger screens
-							2. Added "items-stretch sm:items-center" - makes buttons full width on mobile, centered on larger screens
-							3. Added "gap-2 sm:gap-4" - responsive spacing between buttons (smaller on mobile, larger on desktop)
-							4. Added "sm:ml-auto" - pushes this button group to the right on larger screens (this is the key change for right alignment)
-						*/}
-						<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 sm:ml-auto">
-							{/* Grid/List view toggle - no changes to internal structure */}
+						<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
+							{/* View Toggle */}
 							<div className="flex items-center space-x-2 rounded bg-white border p-1">
 								<Button
 									variant={viewMode === 'grid' ? 'default' : 'ghost'}
@@ -311,7 +309,7 @@ export default function DashboardPage() {
 									<List />
 								</Button>
 							</div>
-							{/* Filter button - no changes */}
+							{/* Filter Button */}
 							<Button
 								variant="outline"
 								size="sm"
@@ -319,35 +317,15 @@ export default function DashboardPage() {
 								<Filter />
 								Filter
 							</Button>
-							{/* Create Board button - no changes */}
-							<Button
-								onClick={() => {
-									setIsCreateDialogOpen(true);
-								}}>
-								<Plus />
-								Create Board
-							</Button>
 						</div>
-					</div>
-					{/* Search Bar*/}
-					<div className="relative mb-4 sm:mb-6">
-						<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-						<Input
-							id="Search"
-							placeholder="Search boards..."
-							className="pl-10"
-							onChange={(e) =>
-								setFilters((prev) => ({ ...prev, search: e.target.value }))
-							}
-						/>
 					</div>
 
 					{/* Boards Grid/List */}
 
 					{boards.length === 0 ? (
-						<div>No boards yet</div>
+						<div className="text-sm text-gray-500">No boards yet</div>
 					) : viewMode === 'grid' ? (
-						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+						<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
 							{filteredBoards.map((board, key) => (
 								<div key={key} className="relative">
 									<Link href={`/boards/${board.id}`}>
@@ -421,7 +399,7 @@ export default function DashboardPage() {
 									setIsCreateDialogOpen(true);
 								}}
 								className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
-								<CardContent className="p-3 sm:p-6 flex flex-col items-center justify-center h-full ">
+								<CardContent className="p-3 sm:p-6 flex flex-col items-center justify-center h-full">
 									<Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
 									<p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">
 										Create new board
@@ -509,7 +487,9 @@ export default function DashboardPage() {
 									</div>
 								</div>
 							))}
-							<Card className="mt-4 border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
+							<Card onClick={() => {
+									setIsCreateDialogOpen(true);
+								}} className="mt-4 border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
 								<CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full min-h-[200px]">
 									<Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
 									<p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">

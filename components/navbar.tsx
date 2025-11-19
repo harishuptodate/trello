@@ -6,6 +6,8 @@ import {
 	Filter,
 	MoreHorizontal,
 	Trello,
+	Search,
+	Plus,
 } from 'lucide-react';
 import {
 	SignInButton,
@@ -16,6 +18,7 @@ import {
 } from '@clerk/nextjs';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { Input } from './ui/input';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -24,6 +27,10 @@ type NavbarProps = {
 	onEditBoard?: () => void;
 	onFilterClick?: () => void;
 	filterCount?: number;
+	// Dashboard props
+	searchValue?: string;
+	onSearchChange?: (value: string) => void;
+	onCreateBoardClick?: () => void;
 };
 
 export default function Navbar({
@@ -31,6 +38,9 @@ export default function Navbar({
 	onEditBoard,
 	onFilterClick,
 	filterCount = 0,
+	searchValue = '',
+	onSearchChange,
+	onCreateBoardClick,
 }: NavbarProps) {
 	const { isSignedIn, user } = useUser();
 	const pathname = usePathname();
@@ -41,16 +51,41 @@ export default function Navbar({
 	if (isDashboardPage) {
 		return (
 			<header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-				<div className="container mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<Trello className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
-						<span className="text-xl sm:text-2xl font-bold text-gray-900">
-							Trello Clone
-						</span>
+				<div className="w-full px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
+					<div className="flex items-center justify-between gap-2 sm:gap-3">
+						{/* Logo */}
+						<div className="flex items-center space-x-2 shrink-0">
+							<Trello className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+							<span className="text-lg sm:text-xl font-bold text-gray-900">
+								Trello
+							</span>
+						</div>
+						{/* Center: Search Bar + Create Button */}
+						<div className="flex items-center gap-2 sm:gap-3 flex-1 justify-center max-w-2xl">
+							<div className="relative flex-1 max-w-md">
+								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+								<Input
+									id="Search"
+									placeholder="Search boards..."
+									className="pl-10 h-8"
+									value={searchValue}
+									onChange={(e) =>
+										onSearchChange && onSearchChange(e.target.value)
+									}
+								/>
+							</div>
+							{onCreateBoardClick && (
+								<Button onClick={onCreateBoardClick} className="shrink-0 h-8">
+									<Plus className="h-4 w-4" />
+									<span className="hidden sm:inline">Create</span>
+								</Button>
+							)}
+						</div>
+						{/* UserButton */}
+						<div className="shrink-0">
+							<UserButton />
+						</div>
 					</div>
-
-					<div className="flex items-center space-x-2 sm:space-x-4"></div>
-					<UserButton />
 				</div>
 			</header>
 		);
@@ -59,7 +94,7 @@ export default function Navbar({
 	if (isBoardPage) {
 		return (
 			<header className="bg-white border-b sticky top-0 z-50">
-				<div className="w-full mx-auto px-12 py-3 sm:py-4">
+				<div className="w-full px-4 sm:px-6 lg:px-12 py-3 sm:py-4">
 					<div className="flex items-center justify-between">
 						<div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
 							<Link
@@ -69,26 +104,25 @@ export default function Navbar({
 								<span className="hidden sm:inline ml-2">Back to Dashboard</span>
 								<span className="sm:hidden">Back</span>
 							</Link>
-							<div className="h-4 sm:h-6 w-px bg-gray-300 hidden sm:block" />
+						</div>
+						<div className="flex items-center space-x-1 sm:space-x-2 min-w-0 absolute left-1/2 transform -translate-x-1/2">
+							<Trello className="text-blue-600 shrink-0" />
 							<div className="flex items-center space-x-1 sm:space-x-2 min-w-0">
-								<Trello className="text-blue-600" />
-								<div className="items-center space-x-1 sm:space-x-2 min-w-0">
-									<span className="text-lg font-bold text-gray-900 truncate">
-										{boardTitle}
-									</span>
-									{onEditBoard && (
-										<Button
-											variant="ghost"
-											size="sm"
-											className="h-7 w-7 shrink-0 p-0"
-											onClick={onEditBoard}>
-											<MoreHorizontal />
-										</Button>
-									)}
-								</div>
+								<span className="text-lg font-bold text-gray-900 truncate">
+									{boardTitle}
+								</span>
+								{onEditBoard && (
+									<Button
+										variant="ghost"
+										size="sm"
+										className="h-7 w-7 shrink-0 p-0"
+										onClick={onEditBoard}>
+										<MoreHorizontal />
+									</Button>
+								)}
 							</div>
 						</div>
-						<div className="items-center space-x-2 sm:space-x-4 shrink-0">
+						<div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
 							{onFilterClick && (
 								<Button
 									variant="outline"
@@ -108,6 +142,9 @@ export default function Navbar({
 									)}
 								</Button>
 							)}
+							<div className="shrink-0">
+								<UserButton />
+							</div>
 						</div>
 					</div>
 				</div>
@@ -115,13 +152,13 @@ export default function Navbar({
 		);
 	}
 
-	return ( 
+	return (
 		<header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-			<div className="w-full mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
+			<div className="w-full px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between">
 				<div className="flex items-center space-x-2">
 					<Trello className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
 					<span className="text-xl sm:text-2xl font-bold text-gray-900">
-						Trello Clone
+						Trello
 					</span>
 				</div>
 				<div className="flex items-center space-x-2 sm:space-x-4">
