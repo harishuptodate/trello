@@ -50,6 +50,7 @@ export default function DashboardPage() {
 	const [editTitle, setEditTitle] = useState('');
 	const [editColor, setEditColor] = useState('');
 	const [boardTitle, setBoardTitle] = useState('');
+	const [createDefaultColumns, setCreateDefaultColumns] = useState(true);
 	const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 	const [filters, setFilters] = useState({
 		search: '',
@@ -77,8 +78,15 @@ export default function DashboardPage() {
 		return matchesSearch && matchesDateRange;
 	});
 
-	const handleCreateBoard = async () => {
-		await createBoard({ title: boardTitle }); // create board with default columns. if not
+	const handleCreateBoard = async (e: React.FormEvent) => {
+		e.preventDefault();
+		await createBoard({
+			title: boardTitle,
+			createDefaultColumns,
+		});
+		setBoardTitle('');
+		setCreateDefaultColumns(true);
+		setIsCreateDialogOpen(false);
 	};
 
 	const handleEditBoard = (board: Board, e: React.MouseEvent) => {
@@ -430,11 +438,12 @@ export default function DashboardPage() {
 													<div className="flex items-center justify-between">
 														<div className={`w-4 h-4 ${board.color} rounded`} />
 														<div className="flex items-center gap-2">
-															{new Date(board.created_at) < new Date(Date.now() - 1000 * 60 * 60 * 24 * 7)	
-																? <Badge className="text-xs" variant="secondary">
+															{new Date(board.created_at) <
+															new Date(Date.now() - 1000 * 60 * 60 * 24 * 7) ? (
+																<Badge className="text-xs" variant="secondary">
 																	New
 																</Badge>
-															: null}
+															) : null}
 															<div className="relative">
 																<Button
 																	variant="ghost"
@@ -719,15 +728,31 @@ export default function DashboardPage() {
 					</DialogHeader>
 					<form className="space-y-4" onSubmit={handleCreateBoard}>
 						<div className="space-y-2">
+							{/* <Label htmlFor="boardTitle">Board Title</Label> */}
 							<Input
 								id="boardTitle"
 								autoFocus={true}
 								className="selection:bg-gray-500 selection:text-white"
 								value={boardTitle}
 								onChange={(e) => setBoardTitle(e.target.value)}
-								placeholder="Project X ..."
+								placeholder="Eg: Project X ..."
 								required
 							/>
+						</div>
+
+						<div className="flex items-center space-x-2">
+							<input
+								type="checkbox"
+								id="createDefaultColumns"
+								checked={createDefaultColumns}
+								onChange={(e) => setCreateDefaultColumns(e.target.checked)}
+								className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+							/>
+							<Label
+								htmlFor="createDefaultColumns"
+								className="text-sm font-normal cursor-pointer">
+								Create default columns (To Do, In Progress, Review, Done)
+							</Label>
 						</div>
 
 						<div className="flex justify-end space-x-2">
@@ -736,6 +761,8 @@ export default function DashboardPage() {
 								variant="outline"
 								onClick={() => {
 									setIsCreateDialogOpen(false);
+									setBoardTitle('');
+									setCreateDefaultColumns(true);
 								}}>
 								Cancel
 							</Button>

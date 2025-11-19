@@ -47,6 +47,7 @@ export function useBoards() {
 		title: string;
 		description?: string;
 		color?: string;
+		createDefaultColumns?: boolean;
 	}) {
 		if (!user) throw new Error('User not authenticated');
 		try {
