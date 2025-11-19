@@ -18,7 +18,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { useBoard } from '@/lib/hooks/useBoards';
 import type { Board, ColumnWithTasks, Task } from '@/lib/supabase/models';
 import { DialogTitle, DialogTrigger } from '@radix-ui/react-dialog';
-import { Calendar, MoreHorizontal, Plus, User } from 'lucide-react';
+import {
+	Calendar,
+	MoreHorizontal,
+	Plus,
+	User,
+	Check,
+	X,
+	Trash2,
+	Pencil,
+} from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 import {
@@ -41,13 +50,259 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useSortable } from '@dnd-kit/sortable';
 
+export type ChecklistItem = {
+	item: string;
+	completed: boolean;
+};
+
 export type TaskData = {
 	title: string;
 	description?: string;
 	assignee?: string;
 	dueDate?: string;
 	priority: 'low' | 'medium' | 'high';
+	checklist?: ChecklistItem[];
 };
+
+function TaskForm({
+	columnId,
+	task,
+	onCreateTask,
+	onUpdateTask,
+	onClose,
+}: {
+	columnId: string;
+	task?: Task | null;
+	onCreateTask?: (columnId: string, taskData: TaskData) => Promise<void>;
+	onUpdateTask?: (taskId: string, taskData: TaskData) => Promise<void>;
+	onClose?: () => void;
+}) {
+	const isEditMode = !!task;
+	const [title, setTitle] = useState(task?.title || '');
+	const [description, setDescription] = useState(task?.description || '');
+	const [assignee, setAssignee] = useState(task?.assignee || '');
+	const [dueDate, setDueDate] = useState(
+		task?.due_date ? task.due_date.split('T')[0] : '',
+	);
+	const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(
+		task?.priority || 'medium',
+	);
+	const [checklist, setChecklist] = useState<ChecklistItem[]>(
+		task?.checklist || [],
+	);
+
+	// Calculate checklist progress
+	const completedCount = checklist.filter((item) => item.completed).length;
+	const totalCount = checklist.length;
+	const progressPercentage =
+		totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+	const isComplete = totalCount > 0 && completedCount === totalCount;
+
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!title.trim()) return;
+
+		// Filter out empty checklist items
+		const validChecklist = checklist.filter(
+			(item) => item.item.trim().length > 0,
+		);
+
+		const taskData: TaskData = {
+			title: title.trim(),
+			description: description.trim() || undefined,
+			assignee: assignee.trim() || undefined,
+			dueDate: dueDate || undefined,
+			priority,
+			checklist: validChecklist.length > 0 ? validChecklist : undefined,
+		};
+
+		try {
+			if (isEditMode && task && onUpdateTask) {
+				await onUpdateTask(task.id, taskData);
+			} else if (onCreateTask) {
+				await onCreateTask(columnId, taskData);
+			}
+			// Close dialog
+			if (onClose) {
+				onClose();
+			} else {
+				const trigger = document.querySelector(
+					'[data-state="open"]',
+				) as HTMLElement;
+				if (trigger) trigger.click();
+			}
+		} catch (error) {
+			console.error('Error saving task:', error);
+		}
+	};
+
+	const addChecklistItem = () => {
+		setChecklist([...checklist, { item: '', completed: false }]);
+	};
+
+	const updateChecklistItem = (
+		index: number,
+		updates: Partial<ChecklistItem>,
+	) => {
+		const updated = [...checklist];
+		updated[index] = { ...updated[index], ...updates };
+		setChecklist(updated);
+	};
+
+	const removeChecklistItem = (index: number) => {
+		setChecklist(checklist.filter((_, i) => i !== index));
+	};
+
+	return (
+		<form className="space-y-4" onSubmit={handleSubmit}>
+			<div className="space-y-2">
+				<Label>Title*</Label>
+				<Input
+					id="title"
+					className="selection:bg-gray-500 selection:text-white"
+					autoFocus={true} 
+					value={title}
+					onChange={(e) => setTitle(e.target.value)}
+					placeholder="Enter task title..."
+					required
+				/>
+			</div>
+			<div className="space-y-2">
+				<Label>Description</Label>
+				<Textarea
+					id="description"
+					value={description}
+					onChange={(e) => setDescription(e.target.value)}
+					placeholder="Enter task description..."
+					rows={3}
+				/>
+			</div>
+			<div className="space-y-2">
+				<Label>Assignee</Label>
+				<Input
+					id="assignee"
+					value={assignee}
+					onChange={(e) => setAssignee(e.target.value)}
+					placeholder="Enter task assignee..."
+				/>
+			</div>
+			<div className="space-y-2">
+				<Label>Priority</Label>
+				<Select
+					value={priority}
+					onValueChange={(value: 'low' | 'medium' | 'high') =>
+						setPriority(value)
+					}>
+					<SelectTrigger>
+						<SelectValue placeholder="Select task priority..." />
+					</SelectTrigger>
+					<SelectContent>
+						{['low', 'medium', 'high'].map((p) => (
+							<SelectItem key={p} value={p}>
+								{p.charAt(0).toUpperCase() + p.slice(1)}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			</div>
+			<div className="space-y-2">
+				<Label>Due Date</Label>
+				<Input
+					type="date"
+					id="dueDate"
+					value={dueDate}
+					onChange={(e) => setDueDate(e.target.value)}
+				/>
+			</div>
+
+			{/* Checklist Section */}
+			<div className="space-y-3">
+				<div className="flex items-center justify-between">
+					<Label>Checklist</Label>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onClick={addChecklistItem}>
+						<Plus className="w-4 h-4 mr-1" />
+						Add Item
+					</Button>
+				</div>
+
+				{checklist.length > 0 && (
+					<div className="space-y-3">
+						{/* Progress Bar */}
+						<div className="space-y-1">
+							<div className="flex items-center justify-between text-sm">
+								<span className="text-gray-600">
+									{completedCount} of {totalCount} completed
+								</span>
+								{isComplete && (
+									<span className="text-green-600 font-medium flex items-center gap-1">
+										<Check className="w-4 h-4" />
+										100%
+									</span>
+								)}
+							</div>
+							<div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
+								<div
+									className={`h-full transition-all duration-300 ${
+										isComplete ? 'bg-green-500' : 'bg-blue-500'
+									}`}
+									style={{ width: `${progressPercentage}%` }}
+								/>
+							</div>
+						</div>
+
+						{/* Checklist Items */}
+						<div className="space-y-2 max-h-60 overflow-y-auto">
+							{checklist.map((item, index) => (
+								<div
+									key={index}
+									className="flex items-center gap-2">
+									<input
+										type="checkbox"
+										checked={item.completed}
+										onChange={(e) =>
+											updateChecklistItem(index, {
+												completed: e.target.checked,
+											})
+										}
+										className="w-4= h-4 text-blue-600 rounded focus:ring-blue-500 flex-shrink-0"
+									/>
+									<Input
+										value={item.item}
+										onChange={(e) =>
+											updateChecklistItem(index, { item: e.target.value })
+										}
+										placeholder="Checklist item..."
+										className={`flex-1  ${
+											item.completed ? 'line-through text-gray-500' : ''
+										}`}
+									/>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										onClick={() => removeChecklistItem(index)}
+										className="text-red-500 hover:text-red-700 flex-shrink-0">
+										<Trash2 className="w-4 h-4" />
+									</Button>
+								</div>
+							))}
+						</div>
+					</div>
+				)}
+			</div>
+
+			<div className="flex justify-end space-x-2 pt-4">
+				<Button type="submit">
+					{isEditMode ? 'Update Task' : 'Create Task'}
+				</Button>
+			</div>
+		</form>
+	);
+}
 
 function DroppableColumn({
 	column,
@@ -57,7 +312,7 @@ function DroppableColumn({
 }: {
 	column: ColumnWithTasks;
 	children: React.ReactNode;
-	onCreateTask: (taskData: any) => Promise<void>;
+	onCreateTask: (columnId: string, taskData: any) => Promise<void>;
 	onEditColumn: (column: ColumnWithTasks) => void;
 }) {
 	const { setNodeRef, isOver } = useDroppable({ id: column.id });
@@ -110,55 +365,7 @@ function DroppableColumn({
 									Add a new task to the board.
 								</p>
 							</DialogHeader>
-							<form className="space-y-4" onSubmit={onCreateTask}>
-								<div className="space-y-2">
-									<Label>Title*</Label>
-									<Input
-										id="title"
-										name="title"
-										placeholder="Enter task title..."
-									/>
-								</div>
-								<div className="space-y-2">
-									<Label>Description</Label>
-									<Textarea // why not Input here// ans: because we want to allow the user to enter a long description, which can  be typed line by line
-										id="description"
-										name="description"
-										placeholder="Enter task description..."
-										rows={3}
-									/>
-								</div>
-								<div className="space-y-2">
-									<Label>Assignee</Label>
-									<Input
-										id="assignee"
-										name="assignee"
-										placeholder="Enter task assignee..."
-									/>
-								</div>
-								<div className="space-y-2">
-									<Label>Priority</Label>
-									<Select name="priority" defaultValue="medium">
-										<SelectTrigger>
-											<SelectValue placeholder="Select task priority..." />
-										</SelectTrigger>
-										<SelectContent>
-											{['low', 'medium', 'high'].map((priority, key) => (
-												<SelectItem key={key} value={priority}>
-													{priority.charAt(0).toUpperCase() + priority.slice(1)}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</div>
-								<div className="space-y-2">
-									<Label>Due Date</Label>
-									<Input type="date" id="dueDate" name="dueDate" className="" />
-								</div>
-								<div className="flex justify-end space-x-2 pt-4">
-									<Button type="submit">Create Task</Button>
-								</div>
-							</form>
+							<TaskForm columnId={column.id} onCreateTask={onCreateTask} />
 						</DialogContent>
 					</Dialog>
 				</div>
@@ -167,7 +374,13 @@ function DroppableColumn({
 	);
 }
 
-function SortableTask({ task }: { task: Task }) {
+function SortableTask({
+	task,
+	onEditTask,
+}: {
+	task: Task;
+	onEditTask?: (task: Task) => void;
+}) {
 	const {
 		attributes,
 		listeners,
@@ -193,6 +406,15 @@ function SortableTask({ task }: { task: Task }) {
 				return 'bg-yellow-500';
 		}
 	}
+
+	// Calculate checklist progress
+	const checklist = task.checklist || [];
+	const completedCount = checklist.filter((item) => item.completed).length;
+	const totalCount = checklist.length;
+	const progressPercentage =
+		totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+	const isComplete = totalCount > 0 && completedCount === totalCount;
+
 	return (
 		<div
 			ref={setNodeRef}
@@ -208,12 +430,49 @@ function SortableTask({ task }: { task: Task }) {
 							<h4 className="font-medium text-gray-900 text-sm leading-tight flex-1 min-w-0 pr-2">
 								{task.title}
 							</h4>
+							{onEditTask && (
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-6 w-6 p-0 shrink-0"
+									onClick={(e) => {
+										e.stopPropagation();
+										onEditTask(task);
+									}}>
+									<Pencil className="w-3 h-3" />
+								</Button>
+							)}
 						</div>
 
 						{/* Task Description */}
 						<p className="text-xs text-gray-600 line-clamp-2">
 							{task.description ?? 'No description'}
 						</p>
+
+						{/* Checklist Progress */}
+						{totalCount > 0 && (
+							<div className="space-y-1">
+								<div className="flex items-center justify-between text-xs">
+									<span className="text-gray-600">
+										{completedCount} of {totalCount} completed
+									</span>
+									{isComplete && (
+										<span className="text-green-600 font-medium flex items-center gap-1">
+											<Check className="w-3 h-3" />
+										</span>
+									)}
+								</div>
+								<div className="relative h-1.5 bg-gray-200 rounded-full overflow-hidden">
+									<div
+										className={`h-full transition-all duration-300 ${
+											isComplete ? 'bg-green-500' : 'bg-blue-500'
+										}`}
+										style={{ width: `${progressPercentage}%` }}
+									/>
+								</div>
+							</div>
+						)}
+
 						{/* Task Metadata */}
 						<div className="flex items-center justify-between">
 							<div className="flex items-center space-x-1 sm:space-x-2 min-w-0">
@@ -320,6 +579,7 @@ export default function BoardPage() {
 		setColumns,
 		moveTask,
 		updateRealColumn,
+		updateRealTask,
 	} = useBoard(id);
 	const [isEditngTitle, setIsEditingTitle] = useState(false);
 	const [newTitle, setNewTitle] = useState('');
@@ -330,6 +590,8 @@ export default function BoardPage() {
 	const [isFilterOpen, setIsFilterOpen] = useState(false);
 	const [isCreatingColumn, setIsCreatingColumn] = useState(false);
 	const [isEditingColumn, setIsEditingColumn] = useState(false);
+	const [isEditingTask, setIsEditingTask] = useState(false);
+	const [editingTask, setEditingTask] = useState<Task | null>(null);
 
 	const [newColumnTitle, setNewColumnTitle] = useState('');
 	const [editingColumnTitle, setEditingColumnTitle] = useState('');
@@ -374,32 +636,44 @@ export default function BoardPage() {
 			setIsEditingTitle(false);
 		} catch (error) {}
 	}
-	async function createTask(taskData: TaskData) {
-		const targetColumn = columns[0];
-		if (!targetColumn) throw new Error('No columns found');
-
-		await createRealTask(targetColumn.id, taskData);
-		const trigger = document.querySelector(
-			'[data-state="open"]',
-		) as HTMLElement;
-		if (trigger) trigger.click();
+	async function createTask(columnId: string, taskData: TaskData) {
+		await createRealTask(columnId, taskData);
 	}
-	async function handleCreateTask(e: React.FormEvent<HTMLFormElement>) {
-		e.preventDefault();
-		const formData = new FormData(e.currentTarget);
-		const taskData = {
-			title: formData.get('title') as string,
-			description: (formData.get('description') as string) ?? undefined, // this better or || undefined ? // ans
-			assignee: (formData.get('assignee') as string) ?? undefined,
-			dueDate: (formData.get('dueDate') as string) ?? undefined,
-			priority:
-				(formData.get('priority') as 'low' | 'medium' | 'high') ?? 'medium',
-		};
-		if (taskData.title.trim() === '') return;
+	async function handleCreateTask(taskData: TaskData) {
 		try {
-			await createTask(taskData);
+			// For the main "Add Task" button, use the first column as default
+			const targetColumn = columns[0];
+			if (!targetColumn) throw new Error('No columns found');
+			await createTask(targetColumn.id, taskData);
+			const trigger = document.querySelector(
+				'[data-state="open"]',
+			) as HTMLElement;
+			if (trigger) trigger.click();
 		} catch (error) {
 			console.error('Error creating task:', error);
+		}
+	}
+
+	function handleEditTask(task: Task) {
+		setEditingTask(task);
+		setIsEditingTask(true);
+	}
+
+	async function handleUpdateTask(taskId: string, taskData: TaskData) {
+		if (!updateRealTask) return;
+		try {
+			await updateRealTask(taskId, {
+				title: taskData.title,
+				description: taskData.description ?? null,
+				assignee: taskData.assignee ?? null,
+				due_date: taskData.dueDate ?? null,
+				priority: taskData.priority,
+				checklist: taskData.checklist || null,
+			});
+			setIsEditingTask(false);
+			setEditingTask(null);
+		} catch (error) {
+			console.error('Error updating task:', error);
 		}
 	}
 
@@ -635,7 +909,7 @@ export default function BoardPage() {
 
 	return (
 		<>
-			<div className="min-h-screen bg-gray-50">
+			<div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
 				<Navbar
 					boardTitle={board?.title}
 					onEditBoard={() => {
@@ -785,9 +1059,9 @@ export default function BoardPage() {
 				</Dialog>
 
 				{/* Board Content */}
-				<main className="w-full px-4 sm:px-6 lg:px-8 py-6 max-w-[1920px] mx-auto">
+				<main className="flex-1 flex flex-col w-full px-4 sm:px-6 lg:px-8 py-6 max-w-[1920px] mx-auto overflow-hidden">
 					{/* Stats */}
-					<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 mb-6 space-y-4 sm:space-y-0 px-8">
+					<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 mb-6 space-y-4 sm:space-y-0 px-8 flex-shrink-0">
 						<div className="flex flex-wrap gap-4 sm:gap-6">
 							<div className="text-sm text-gray-600">
 								<span className="font-medium">Total Tasks: </span>
@@ -799,7 +1073,7 @@ export default function BoardPage() {
 						</div>
 
 						{/* Add task dialog */}
-						<Dialog>
+						{/* <Dialog>
 							<DialogTrigger asChild>
 								<Button>
 									<Plus />
@@ -810,62 +1084,17 @@ export default function BoardPage() {
 								<DialogHeader>
 									<DialogTitle>Create New Task</DialogTitle>
 									<p className="text-sm text-gray-600">
-										{' '}
 										Add a new task to the board.
 									</p>
 								</DialogHeader>
-								<form className="space-y-4" onSubmit={handleCreateTask}>
-									<div className="space-y-2">
-										<Label>Title*</Label>
-										<Input
-											id="title"
-											name="title"
-											placeholder="Enter task title..."
-										/>
-									</div>
-									<div className="space-y-2">
-										<Label>Description</Label>
-										<Textarea // why not Input here// ans: because we want to allow the user to enter a long description, which can  be typed line by line
-											id="description"
-											name="description"
-											placeholder="Enter task description..."
-											rows={3}
-										/>
-									</div>
-									<div className="space-y-2">
-										<Label>Assignee</Label>
-										<Input
-											id="assignee"
-											name="assignee"
-											placeholder="Enter task assignee..."
-										/>
-									</div>
-									<div className="space-y-2">
-										<Label>Priority</Label>
-										<Select name="priority" defaultValue="medium">
-											<SelectTrigger>
-												<SelectValue placeholder="Select task priority..." />
-											</SelectTrigger>
-											<SelectContent>
-												{['low', 'medium', 'high'].map((priority, key) => (
-													<SelectItem key={key} value={priority}>
-														{priority.charAt(0).toUpperCase() +
-															priority.slice(1)}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-									<div className="space-y-2">
-										<Label>Due Date</Label>
-										<Input type="date" id="dueDate" name="dueDate" />
-									</div>
-									<div className="flex justify-end space-x-2 pt-4">
-										<Button type="submit">Create Task</Button>
-									</div>
-								</form>
+								{columns.length > 0 && (
+									<TaskForm
+										columnId={columns[0].id}
+										onCreateTask={createTask}
+									/>
+								)}
 							</DialogContent>
-						</Dialog>
+						</Dialog> */}
 					</div>
 
 					{/* Board Columns */}
@@ -882,21 +1111,25 @@ export default function BoardPage() {
 							onMouseMove={handleMouseMove}
 							onMouseUp={handleMouseUp}
 							onMouseLeave={handleMouseLeave}
-							className={`flex flex-col lg:flex-row lg:space-x-6 lg:overflow-x-auto lg:pb-6 lg:px-2 lg:mx-2 lg:[&::-webkit-scrollbar]:h-2 lg:[&::-webkit-scrollbar-track]:bg-gray-100 lg:[&::-webkit-scrollbar-thumb]:bg-gray-300 lg:[&::-webkit-scrollbar-thumb]:rounded-full space-y-4 lg:space-y-0 ${
+							className={`flex-1 flex flex-col lg:flex-row lg:space-x-6 lg:overflow-x-auto lg:overflow-y-hidden lg:pb-6 lg:px-2 lg:mx-2 lg:[&::-webkit-scrollbar]:h-2 lg:[&::-webkit-scrollbar-track]:bg-gray-100 lg:[&::-webkit-scrollbar-thumb]:bg-gray-300 lg:[&::-webkit-scrollbar-thumb]:rounded-full space-y-4 lg:space-y-0 min-h-0 ${
 								isDraggingScroll ? 'lg:cursor-grabbing' : 'lg:cursor-grab'
 							}`}>
 							{filteredColumns.map((column, key) => (
 								<DroppableColumn
 									key={key}
 									column={column}
-									onCreateTask={handleCreateTask}
+									onCreateTask={createTask}
 									onEditColumn={handleEditColumn}>
 									<SortableContext
 										items={column.tasks.map((task: Task) => task.id)}
 										strategy={verticalListSortingStrategy}>
 										<div className="space-y-3">
 											{column.tasks.map((task: Task, key: number) => (
-												<SortableTask task={task} key={key} />
+												<SortableTask
+													task={task}
+													key={key}
+													onEditTask={handleEditTask}
+												/>
 											))}
 										</div>
 									</SortableContext>
@@ -906,11 +1139,11 @@ export default function BoardPage() {
 							<div className="w-full lg:flex-shrink-0 lg:w-80">
 								<div>
 									<Button
-										className="w-full h-full min-h-[200px] border-dashed border-2 text-gray-500 hover:text-gray-700"
+										className="w-full h-full min-h-[130px] border-dashed border-2 text-gray-500 hover:text-gray-700"
 										variant="outline"
 										onClick={() => setIsCreatingColumn(true)}>
 										<Plus />
-										Add another column...
+										Add another list...
 									</Button>
 								</div>
 							</div>
@@ -991,6 +1224,29 @@ export default function BoardPage() {
 							<Button type="submit">Update Column</Button>
 						</div>
 					</form>
+				</DialogContent>
+			</Dialog>
+
+			{/* Edit Task Dialog */}
+			<Dialog open={isEditingTask} onOpenChange={setIsEditingTask}>
+				<DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+					<DialogHeader>
+						<DialogTitle>Edit Task</DialogTitle>
+						<p className="text-sm text-gray-600">
+							Update task details and checklist.
+						</p>
+					</DialogHeader>
+					{editingTask && (
+						<TaskForm
+							columnId={editingTask.column_id}
+							task={editingTask}
+							onUpdateTask={handleUpdateTask}
+							onClose={() => {
+								setIsEditingTask(false);
+								setEditingTask(null);
+							}}
+						/>
+					)}
 				</DialogContent>
 			</Dialog>
 		</>

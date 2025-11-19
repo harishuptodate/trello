@@ -25,6 +25,7 @@ export type Task = {
 	assignee: string | null;
 	due_date: string | null;
 	priority: 'low' | 'medium' | 'high';
+	checklist: { item: string; completed: boolean }[] | null; // how to put this in supabase schema ? ans
 	sort_order: number;
 	created_at: string;
 };

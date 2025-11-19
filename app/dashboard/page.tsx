@@ -25,19 +25,32 @@ import {
 	Grid3X3,
 	List,
 	Loader2,
+	MoreHorizontal,
 	Plus,
 	Rocket,
 	Search,
 	Trello,
+	Edit,
+	Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function DashboardPage() {
 	const { user } = useUser();
-	const { createBoard, boards, loading, error } = useBoards();
+	const { createBoard, boards, loading, error, updateBoard, deleteBoard } =
+		useBoards();
 	const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 	const [isFilterOpen, setIsFilterOpen] = useState(false);
+	const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+	const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+	const [editingBoard, setEditingBoard] = useState<Board | null>(null);
+	const [deletingBoard, setDeletingBoard] = useState<Board | null>(null);
+	const [editTitle, setEditTitle] = useState('');
+	const [editColor, setEditColor] = useState('');
+	const [boardTitle, setBoardTitle] = useState('');
+	const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 	const [filters, setFilters] = useState({
 		search: '',
 		dataRange: {
@@ -51,18 +64,79 @@ export default function DashboardPage() {
 	});
 
 	const filteredBoards = boards.filter((board: Board) => {
+		if (!board || !board.title) return false;
+
 		const matchesSearch = board.title
 			.toLowerCase()
 			.includes(filters.search.toLowerCase());
 		const matchesDateRange =
-			!filters.dataRange.start || new Date(board.created_at) >= new Date(filters.dataRange.start) &&
-			(!filters.dataRange.end || new Date(board.created_at) <= new Date(filters.dataRange.end)); 
+			!filters.dataRange.start ||
+			(new Date(board.created_at) >= new Date(filters.dataRange.start) &&
+				(!filters.dataRange.end ||
+					new Date(board.created_at) <= new Date(filters.dataRange.end)));
 		return matchesSearch && matchesDateRange;
 	});
 
 	const handleCreateBoard = async () => {
-		await createBoard({ title: 'New Board' });
+		await createBoard({ title: boardTitle }); // create board with default columns. if not
 	};
+
+	const handleEditBoard = (board: Board, e: React.MouseEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setEditingBoard(board);
+		setEditTitle(board.title);
+		setEditColor(board.color);
+		setIsEditDialogOpen(true);
+		setOpenDropdownId(null);
+	};
+
+	const handleDeleteBoard = (board: Board, e: React.MouseEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setDeletingBoard(board);
+		setIsDeleteDialogOpen(true);
+		setOpenDropdownId(null);
+	};
+
+	const handleUpdateBoard = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!editingBoard || !editTitle.trim()) return;
+		try {
+			await updateBoard(editingBoard.id, {
+				title: editTitle.trim(),
+				color: editColor || editingBoard.color,
+			});
+			setIsEditDialogOpen(false);
+			setEditingBoard(null);
+			setEditTitle('');
+			setEditColor('');
+		} catch (error) {
+			console.error('Error updating board:', error);
+		}
+	};
+
+	const handleConfirmDelete = async () => {
+		if (!deletingBoard) return;
+		try {
+			await deleteBoard(deletingBoard.id);
+			setIsDeleteDialogOpen(false);
+			setDeletingBoard(null);
+		} catch (error) {
+			console.error('Error deleting board:', error);
+		}
+	};
+
+	// Close dropdown when clicking outside
+	useEffect(() => {
+		const handleClickOutside = (event: MouseEvent) => {
+			if (openDropdownId) {
+				setOpenDropdownId(null);
+			}
+		};
+		document.addEventListener('click', handleClickOutside);
+		return () => document.removeEventListener('click', handleClickOutside);
+	}, [openDropdownId]);
 
 	function clearFilters() {
 		setFilters({
@@ -100,7 +174,9 @@ export default function DashboardPage() {
 				<div className="mb-6 sm:mb-8">
 					<h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
 						Welcome back,{' '}
-						{user?.firstName ?? user?.emailAddresses[0].emailAddress}! 👋
+						{user?.firstName ??
+							user?.emailAddresses[0].emailAddress.split('@')[0]}
+						! 👋
 					</h1>
 					<p className="text-gray-600">
 						Here's whats's hapening with your boards today.
@@ -108,7 +184,7 @@ export default function DashboardPage() {
 				</div>
 
 				{/* Stats*/}
-				<div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+				{/* <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
 					<Card>
 						<CardContent className="p-4 sm:p-6">
 							<div className="flex items-center justify-between">
@@ -153,6 +229,7 @@ export default function DashboardPage() {
 									<p className="text-xl sm:text-2xl font-bold text-gray-900">
 										{
 											boards.filter((board) => {
+												if (!board || !board.updated_at) return false;
 												const updatedAt = new Date(board.updated_at);
 												const oneWeekAgo = new Date();
 												oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -184,7 +261,7 @@ export default function DashboardPage() {
 							</div>
 						</CardContent>
 					</Card>
-				</div>
+				</div> */}
 				{/* Boards */}
 				<div className="mb-6 sm:mb-8">
 					{/* 
@@ -233,7 +310,10 @@ export default function DashboardPage() {
 								Filter
 							</Button>
 							{/* Create Board button - no changes */}
-							<Button onClick={handleCreateBoard}>
+							<Button
+								onClick={() => {
+									setIsCreateDialogOpen(true);
+								}}>
 								<Plus />
 								Create Board
 							</Button>
@@ -259,58 +339,49 @@ export default function DashboardPage() {
 					) : viewMode === 'grid' ? (
 						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
 							{filteredBoards.map((board, key) => (
-								<Link href={`/boards/${board.id}`} key={key}>
-									<Card className="hover:shadow-lg transition-shadow cursor-pointer group">
-										<CardHeader className="pb-3">
-											<div className="flex items-center justify-between">
-												<div className={`w-4 h-4 ${board.color} rounded`} />
-												<Badge className="text-xs" variant="secondary">
-													New
-												</Badge>
-											</div>
-										</CardHeader>
-										<CardContent className="p-4 sm:p-6">
-											<CardTitle className="text-base sm:text-lg mb-2 group-hover:text-blue-600 transition-colors">
-												{board.title}
-											</CardTitle>
-											<CardDescription className="text-sm mb-4">
-												{board.description}
-											</CardDescription>
-											<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500 space-y-1 sm:space-y-0">
-												<span>
-													Created{' '}
-													{new Date(board.created_at).toLocaleDateString()}
-												</span>
-												<span>
-													Updated{' '}
-													{new Date(board.updated_at).toLocaleDateString()}
-												</span>
-											</div>
-										</CardContent>
-									</Card>
-								</Link>
-							))}
-							<Card className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
-								<CardContent className="p-3 sm:p-6 flex flex-col items-center justify-center h-full ">
-									<Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
-									<p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">
-										Create new board
-									</p>
-								</CardContent>
-							</Card>
-						</div>
-					) : (
-						<div>
-							{boards.map((board, key) => (
-								<div key={key} className={key > 0 ? 'mt-4' : ''}>
+								<div key={key} className="relative">
 									<Link href={`/boards/${board.id}`}>
 										<Card className="hover:shadow-lg transition-shadow cursor-pointer group">
 											<CardHeader className="pb-3">
 												<div className="flex items-center justify-between">
 													<div className={`w-4 h-4 ${board.color} rounded`} />
-													<Badge className="text-xs" variant="secondary">
-														New
-													</Badge>
+													<div className="flex items-center gap-2">
+														<div className="relative">
+															<Button
+																variant="ghost"
+																size="sm"
+																className="h-7 w-7 shrink-0 p-0"
+																onClick={(e) => {
+																	e.preventDefault();
+																	e.stopPropagation();
+																	setOpenDropdownId(
+																		openDropdownId === board.id
+																			? null
+																			: board.id,
+																	);
+																}}>
+																<MoreHorizontal />
+															</Button>
+															{openDropdownId === board.id && (
+																<div className="absolute right-0 top-8 z-50 w-40 bg-white border rounded-md shadow-lg">
+																	<button
+																		className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+																		onClick={(e) => handleEditBoard(board, e)}>
+																		<Edit className="h-4 w-4" />
+																		Edit
+																	</button>
+																	<button
+																		className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 text-red-600"
+																		onClick={(e) =>
+																			handleDeleteBoard(board, e)
+																		}>
+																		<Trash2 className="h-4 w-4" />
+																		Delete
+																	</button>
+																</div>
+															)}
+														</div>
+													</div>
 												</div>
 											</CardHeader>
 											<CardContent className="p-4 sm:p-6">
@@ -333,6 +404,98 @@ export default function DashboardPage() {
 											</CardContent>
 										</Card>
 									</Link>
+								</div>
+							))}
+							<Card
+								onClick={() => {
+									setIsCreateDialogOpen(true);
+								}}
+								className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
+								<CardContent className="p-3 sm:p-6 flex flex-col items-center justify-center h-full ">
+									<Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
+									<p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">
+										Create new board
+									</p>
+								</CardContent>
+							</Card>
+						</div>
+					) : (
+						<div>
+							{filteredBoards.map((board, key) => (
+								<div key={key} className={key > 0 ? 'mt-4' : ''}>
+									<div className="relative">
+										<Link href={`/boards/${board.id}`}>
+											<Card className="hover:shadow-lg transition-shadow cursor-pointer group">
+												<CardHeader className="pb-3">
+													<div className="flex items-center justify-between">
+														<div className={`w-4 h-4 ${board.color} rounded`} />
+														<div className="flex items-center gap-2">
+															{new Date(board.created_at) < new Date(Date.now() - 1000 * 60 * 60 * 24 * 7)	
+																? <Badge className="text-xs" variant="secondary">
+																	New
+																</Badge>
+															: null}
+															<div className="relative">
+																<Button
+																	variant="ghost"
+																	size="sm"
+																	className="h-7 w-7 shrink-0 p-0"
+																	onClick={(e) => {
+																		e.preventDefault();
+																		e.stopPropagation();
+																		setOpenDropdownId(
+																			openDropdownId === board.id
+																				? null
+																				: board.id,
+																		);
+																	}}>
+																	<MoreHorizontal />
+																</Button>
+																{openDropdownId === board.id && (
+																	<div className="absolute right-0 top-8 z-50 w-40 bg-white border rounded-md shadow-lg">
+																		<button
+																			className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+																			onClick={(e) =>
+																				handleEditBoard(board, e)
+																			}>
+																			<Edit className="h-4 w-4" />
+																			Edit
+																		</button>
+																		<button
+																			className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 text-red-600"
+																			onClick={(e) =>
+																				handleDeleteBoard(board, e)
+																			}>
+																			<Trash2 className="h-4 w-4" />
+																			Delete
+																		</button>
+																	</div>
+																)}
+															</div>
+														</div>
+													</div>
+												</CardHeader>
+												<CardContent className="p-4 sm:p-6">
+													<CardTitle className="text-base sm:text-lg mb-2 group-hover:text-blue-600 transition-colors">
+														{board.title}
+													</CardTitle>
+													<CardDescription className="text-sm mb-4">
+														{board.description}
+													</CardDescription>
+													<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500 space-y-1 sm:space-y-0">
+														<span>
+															Created{' '}
+															{new Date(board.created_at).toLocaleDateString()}
+														</span>
+														<span>
+															Updated{' '}
+															{new Date(board.updated_at).toLocaleDateString()}
+														</span>
+													</div>
+												</CardContent>
+											</Card>
+										</Link>
+									</div>
 								</div>
 							))}
 							<Card className="mt-4 border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
@@ -446,6 +609,143 @@ export default function DashboardPage() {
 							</Button>
 						</div>
 					</div>
+				</DialogContent>
+			</Dialog>
+			{/* Edit Board Dialog */}
+			<Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+				<DialogContent className="w-[95vw] max-w-425px mx-auto">
+					<DialogHeader>
+						<DialogTitle>Edit Board</DialogTitle>
+					</DialogHeader>
+					<form className="space-y-4" onSubmit={handleUpdateBoard}>
+						<div className="space-y-2">
+							<Label htmlFor="boardTitle">Board Title</Label>
+							<Input
+								id="boardTitle"
+								autoFocus={true}
+								className="selection:bg-gray-500 selection:text-white"
+								value={editTitle}
+								onChange={(e) => setEditTitle(e.target.value)}
+								placeholder="Enter board title..."
+								required
+							/>
+						</div>
+
+						<div className="space-y-2">
+							<Label>Board Color</Label>
+							<div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+								{[
+									'bg-blue-500',
+									'bg-green-500',
+									'bg-red-500',
+									'bg-yellow-500',
+									'bg-purple-500',
+									'bg-orange-500',
+									'bg-pink-500',
+									'bg-teal-500',
+									'bg-indigo-500',
+									'bg-violet-500',
+									'bg-cyan-500',
+									'bg-emerald-500',
+								].map((color, key) => (
+									<button
+										type="button"
+										key={key}
+										className={`w-8 h-8 rounded-full ${color} ${
+											color === editColor
+												? 'ring-2 ring-offset-2 ring-gray-600'
+												: ''
+										}`}
+										onClick={() => setEditColor(color)}></button>
+								))}
+							</div>
+						</div>
+						<div className="flex justify-end space-x-2">
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => {
+									setIsEditDialogOpen(false);
+									setEditingBoard(null);
+									setEditTitle('');
+									setEditColor('');
+								}}>
+								Cancel
+							</Button>
+							<Button
+								className="focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-primary"
+								type="submit">
+								Save Changes
+							</Button>
+						</div>
+					</form>
+				</DialogContent>
+			</Dialog>
+			{/* Delete Confirmation Dialog */}
+			<Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+				<DialogContent className="w-[95vw] max-w-425px mx-auto">
+					<DialogHeader>
+						<DialogTitle>Delete Board</DialogTitle>
+						<p className="text-sm text-gray-600">
+							Are you sure you want to delete "{deletingBoard?.title}"? This
+							action cannot be undone.
+						</p>
+					</DialogHeader>
+					<div className="flex justify-end space-x-2 pt-4">
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => {
+								setIsDeleteDialogOpen(false);
+								setDeletingBoard(null);
+							}}>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							variant="destructive"
+							onClick={handleConfirmDelete}>
+							Delete
+						</Button>
+					</div>
+				</DialogContent>
+			</Dialog>
+			{/* create Board */}
+
+			<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+				<DialogContent className="w-[95vw] max-w-425px mx-auto">
+					<DialogHeader>
+						<DialogTitle>Enter Board Title</DialogTitle>
+					</DialogHeader>
+					<form className="space-y-4" onSubmit={handleCreateBoard}>
+						<div className="space-y-2">
+							<Input
+								id="boardTitle"
+								autoFocus={true}
+								className="selection:bg-gray-500 selection:text-white"
+								value={boardTitle}
+								onChange={(e) => setBoardTitle(e.target.value)}
+								placeholder="Project X ..."
+								required
+							/>
+						</div>
+
+						<div className="flex justify-end space-x-2">
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => {
+									setIsCreateDialogOpen(false);
+								}}>
+								Cancel
+							</Button>
+							<Button
+								className="focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-primary"
+								type="submit">
+								Create Board
+							</Button>
+						</div>
+					</form>
 				</DialogContent>
 			</Dialog>
 		</div>

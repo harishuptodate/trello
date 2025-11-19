@@ -53,6 +53,12 @@ export const boardService = {
 
 		return data;
 	},
+
+	async deleteBoard(supabase: SupabaseClient, boardId: string): Promise<void> {
+		const { error } = await supabase.from('boards').delete().eq('id', boardId);
+
+		if (error) throw error;
+	},
 };
 
 export const columnService = {
@@ -86,15 +92,19 @@ export const columnService = {
 		return data;
 	},
 
-	async updateColumnTitle(supabase: SupabaseClient, columnId: string, title: string): Promise<Column> {
+	async updateColumnTitle(
+		supabase: SupabaseClient,
+		columnId: string,
+		title: string,
+	): Promise<Column> {
 		const { data, error } = await supabase
 			.from('columns')
 			.update({ title })
 			.eq('id', columnId)
-			.select()  
-			.single()
-		
-			if (error) throw error;
+			.select()
+			.single();
+
+		if (error) throw error;
 		return data;
 	},
 };
@@ -145,6 +155,23 @@ export const taskService = {
 			.from('tasks')
 			.update({ column_id: newColumnId, sort_order: newSortOrder })
 			.eq('id', taskId);
+
+		if (error) throw error;
+
+		return data;
+	},
+
+	async updateTask(
+		supabase: SupabaseClient,
+		taskId: string,
+		updates: Partial<Task>,
+	): Promise<Task> {
+		const { data, error } = await supabase
+			.from('tasks')
+			.update(updates)
+			.eq('id', taskId)
+			.select()
+			.single();
 
 		if (error) throw error;
 

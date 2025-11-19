@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { boardDataService, boardService, columnService, taskService } from '../services';
+import {
+	boardDataService,
+	boardService,
+	columnService,
+	taskService,
+} from '../services';
 import { useUser } from '@clerk/nextjs';
 import { Board, Column, ColumnWithTasks, Task } from '../supabase/models';
 import { useSupabase } from '../supabase/SupabaseProvider';
@@ -57,7 +62,32 @@ export function useBoards() {
 		}
 	}
 
-	return { boards, loading, error, createBoard };
+	async function updateBoard(boardId: string, updates: Partial<Board>) {
+		try {
+			const updatedBoard = await boardService.updateBoard(
+				supabase!,
+				boardId,
+				updates,
+			);
+			setBoards((prev) =>
+				prev.map((board) => (board.id === boardId ? updatedBoard : board)),
+			);
+			return updatedBoard;
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to update board');
+		}
+	}
+
+	async function deleteBoard(boardId: string) {
+		try {
+			await boardService.deleteBoard(supabase!, boardId);
+			setBoards((prev) => prev.filter((board) => board.id !== boardId));
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to delete board');
+		}
+	}
+
+	return { boards, loading, error, createBoard, updateBoard, deleteBoard };
 }
 
 export function useBoard(boardId: string) {
@@ -101,7 +131,7 @@ export function useBoard(boardId: string) {
 				updates,
 			);
 			setBoard(updatedBoard);
-			return updateBoard;
+			return updatedBoard;
 		} catch (err) {
 			setError(
 				err instanceof Error ? err.message : 'Failed to update the board.',
@@ -119,7 +149,8 @@ export function useBoard(boardId: string) {
 				priority: taskData.priority ?? 'medium',
 				sort_order:
 					columns.find((col) => col.id === columnId)?.tasks.length || 0, // why + 1 ? // ans: because the sort_order is the index of the column in the columns array, cant we do tasks.length || 0 ? // ans: because the tasks.length is the number of tasks in the column, not the sort_order
-			});
+				checklist: taskData.checklist || null,
+			} as Omit<Task, 'id' | 'created_at' | 'updated_at'>);
 
 			setColumns((prev) =>
 				prev.map((col) =>
@@ -170,10 +201,8 @@ export function useBoard(boardId: string) {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to move task.');
 		}
-	
 	}
 	async function createRealColumn(columnTitle: string) {
-
 		if (!boardId || !board) throw new Error('Board not loaded');
 		try {
 			const newColumn = await columnService.createColumn(supabase!, {
@@ -192,13 +221,43 @@ export function useBoard(boardId: string) {
 	}
 	async function updateRealColumn(columnId: string, title: string) {
 		try {
-			const updatedColumn = await columnService.updateColumnTitle(supabase!, columnId, title);
-			setColumns((prev) => prev.map((col) => col.id === columnId ? { ...col, ...updatedColumn } : col));
+			const updatedColumn = await columnService.updateColumnTitle(
+				supabase!,
+				columnId,
+				title,
+			);
+			setColumns((prev) =>
+				prev.map((col) =>
+					col.id === columnId ? { ...col, ...updatedColumn } : col,
+				),
+			);
 			return updatedColumn;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to update column.');
 		}
 	}
+
+	async function updateRealTask(taskId: string, updates: Partial<Task>) {
+		try {
+			const updatedTask = await taskService.updateTask(
+				supabase!,
+				taskId,
+				updates,
+			);
+			setColumns((prev) =>
+				prev.map((col) => ({
+					...col,
+					tasks: col.tasks.map((task) =>
+						task.id === taskId ? updatedTask : task,
+					),
+				})),
+			);
+			return updatedTask;
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to update task.');
+		}
+	}
+
 	return {
 		board,
 		columns,
@@ -210,5 +269,6 @@ export function useBoard(boardId: string) {
 		setColumns,
 		moveTask,
 		updateRealColumn,
+		updateRealTask,
 	};
 }
