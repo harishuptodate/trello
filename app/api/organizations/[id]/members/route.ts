@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-utils';
 import { organizationMemberService } from '@/lib/services';
-import { isOrgAdmin, getOrgMembers } from '@/lib/auth-rules';
+import { isOrgAdmin, getOrgMembers, hasOrgAccess } from '@/lib/auth-rules';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
@@ -16,12 +16,13 @@ export async function GET(
 ) {
 	try {
 		const user = await requireAuth();
-		const hasAccess = await isOrgAdmin(user.id, params.id);
+		const hasAccess = await hasOrgAccess(user.id, params.id);
 
 		if (!hasAccess) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
+		// All members can view the member list
 		const members = await getOrgMembers(params.id);
 		return NextResponse.json(members);
 	} catch (error) {

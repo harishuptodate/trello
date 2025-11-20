@@ -8,7 +8,14 @@ export type BoardWithColumns = Board & {
 };
 
 export type ColumnWithTasks = Column & {
-	tasks: Task[];
+	tasks: (Task & {
+		assignee: {
+			id: string;
+			name: string | null;
+			email: string;
+			image: string | null;
+		} | null;
+	})[];
 };
 
 export const boardService = {
@@ -178,7 +185,19 @@ export const taskService = {
 		});
 	},
 
-	async updateTask(taskId: string, updates: Partial<Task>) {
+	async updateTask(
+		taskId: string,
+		updates: {
+			title?: string;
+			description?: string | null;
+			assigneeId?: string | null;
+			dueDate?: Date | null;
+			priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+			checklist?: any;
+			sortOrder?: number;
+			columnId?: string;
+		},
+	) {
 		return prisma.task.update({
 			where: { id: taskId },
 			data: updates,
@@ -203,6 +222,9 @@ export const taskService = {
 };
 
 export const boardDataService = {
+	async getBoardsByOrganization(organizationId: string) {
+		return boardService.getBoardsByOrganization(organizationId);
+	},
 	async getBoardWithColumns(boardId: string): Promise<BoardWithColumns> {
 		const board = await prisma.board.findUnique({
 			where: { id: boardId },

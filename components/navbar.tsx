@@ -11,6 +11,7 @@ import {
 	LogOut,
 	User,
 	ChevronDown,
+	Building2,
 } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
 import { Button } from './ui/button';
@@ -36,7 +37,11 @@ type NavbarProps = {
 	searchValue?: string;
 	onSearchChange?: (value: string) => void;
 	onCreateBoardClick?: () => void;
-	organizations?: Array<{ id: string; name: string; organization: any }>;
+	organizations?: Array<{
+		id: string;
+		role: 'ADMIN' | 'MEMBER';
+		organization: { id: string; name: string; slug: string };
+	}>;
 	selectedOrgId?: string | null;
 	onOrgChange?: (orgId: string) => void;
 };
@@ -83,6 +88,12 @@ export default function Navbar({
 						</div>
 						{/* Center: Search Bar + Create Button */}
 						<div className="flex items-center gap-2 sm:gap-3 flex-1 justify-center max-w-2xl">
+							<Link href="/organizations">
+								<Button variant="ghost" size="sm" className="h-8">
+									<Building2 className="h-4 w-4 mr-2" />
+									<span className="hidden sm:inline">Organizations</span>
+								</Button>
+							</Link>
 							{organizations.length > 0 && (
 								<Select
 									value={currentOrgId || undefined}

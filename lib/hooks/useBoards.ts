@@ -23,7 +23,11 @@ export function useBoards(organizationId?: string | null) {
 	const [error, setError] = useState<string | null>(null);
 
 	const loadBoards = useCallback(async () => {
-		if (!orgId || !session?.user) return;
+		if (!orgId || !session?.user) {
+			setBoards([]);
+			setLoading(false);
+			return;
+		}
 
 		try {
 			setLoading(true);
@@ -34,6 +38,7 @@ export function useBoards(organizationId?: string | null) {
 			setBoards(data);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to load boards.');
+			setBoards([]);
 		} finally {
 			setLoading(false);
 		}
@@ -42,6 +47,10 @@ export function useBoards(organizationId?: string | null) {
 	useEffect(() => {
 		if (orgId && session?.user) {
 			loadBoards();
+		} else if (!orgId && session?.user) {
+			// User is authenticated but no org selected
+			setBoards([]);
+			setLoading(false);
 		}
 	}, [orgId, session, loadBoards]);
 
@@ -142,14 +151,10 @@ export function useBoard(boardId: string) {
 		try {
 			setLoading(true);
 			setError(null);
-			const response = await fetch(`/api/boards/${boardId}`);
+			const response = await fetch(`/api/boards/${boardId}/full`);
 			if (!response.ok) throw new Error('Failed to load board');
 
-			const boardData = await response.json();
-			const fullBoard = await fetch(`/api/boards/${boardId}/full`)
-				.then((r) => r.json())
-				.catch(() => boardData);
-
+			const fullBoard = await response.json();
 			setBoard(fullBoard);
 			setColumns(fullBoard.columns || []);
 		} catch (err) {
@@ -219,7 +224,7 @@ export function useBoard(boardId: string) {
 	) {
 		try {
 			const response = await fetch(`/api/tasks/${taskId}/move`, {
-				method: 'POST',
+				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ newColumnId, newSortOrder }),
 			});

@@ -38,10 +38,14 @@ import { useOrganization } from '@/lib/organization-context';
 
 export default function DashboardPage() {
 	const { data: session } = useSession();
-	const { selectedOrgId, setSelectedOrgId } = useOrganization();
-	const [organizations, setOrganizations] = useState<any[]>([]);
-	const [isAdmin, setIsAdmin] = useState(false);
-	const [orgLoading, setOrgLoading] = useState(true);
+	const {
+		selectedOrgId,
+		setSelectedOrgId,
+		organizations,
+		loading: orgLoading,
+		isAdmin,
+		refetchOrganizations,
+	} = useOrganization();
 
 	const {
 		createBoard,
@@ -76,50 +80,11 @@ export default function DashboardPage() {
 		},
 	});
 
-	// Load organizations on mount
-	useEffect(() => {
-		if (session?.user) {
-			fetchOrganizations();
-		}
-	}, [session]);
-
-	async function fetchOrganizations() {
-		try {
-			setOrgLoading(true);
-			const response = await fetch('/api/organizations');
-			if (response.ok) {
-				const orgs = await response.json();
-				setOrganizations(orgs);
-
-				// Set first org as selected if none selected
-				if (!selectedOrgId && orgs.length > 0) {
-					setSelectedOrgId(orgs[0].organization.id);
-				}
-
-				// Check if user is admin of selected org
-				if (selectedOrgId) {
-					const selectedOrg = orgs.find(
-						(o: any) => o.organization.id === selectedOrgId,
-					);
-					setIsAdmin(selectedOrg?.role === 'ADMIN');
-				}
-			}
-		} catch (err) {
-			console.error('Failed to load organizations:', err);
-		} finally {
-			setOrgLoading(false);
-		}
-	}
-
 	useEffect(() => {
 		if (selectedOrgId) {
-			const selectedOrg = organizations.find(
-				(o: any) => o.organization.id === selectedOrgId,
-			);
-			setIsAdmin(selectedOrg?.role === 'ADMIN');
 			refetch();
 		}
-	}, [selectedOrgId, organizations]);
+	}, [selectedOrgId, refetch]);
 
 	const filteredBoards = boards.filter((board: BoardType) => {
 		if (!board || !board.title) return false;
@@ -217,22 +182,12 @@ export default function DashboardPage() {
 		});
 	}
 
-	if (loading || orgLoading) {
+	if (orgLoading || (loading && selectedOrgId)) {
 		return (
 			<div className="flex items-center justify-center h-screen gap-2">
 				<Loader2 className="animate-spin h-10 w-10 text-blue-600" />
 				<span className="text-lg font-medium text-gray-900">
 					Loading your boards...
-				</span>
-			</div>
-		);
-	}
-	if (error) {
-		return (
-			<div className="flex items-center justify-center h-screen gap-2">
-				<Loader2 className="animate-spin h-10 w-10 text-blue-600" />
-				<span className="text-lg font-medium text-gray-900">
-					Error loading boards
 				</span>
 			</div>
 		);
@@ -245,9 +200,27 @@ export default function DashboardPage() {
 					<p className="text-lg font-medium text-gray-900 mb-4">
 						No organizations found
 					</p>
-					<p className="text-sm text-gray-600">
+					<p className="text-sm text-gray-600 mb-4">
 						Please create an organization to get started
 					</p>
+					<Button onClick={() => (window.location.href = '/organizations')}>
+						Go to Organizations
+					</Button>
+				</div>
+			</div>
+		);
+	}
+
+	if (!selectedOrgId && !orgLoading) {
+		return (
+			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+				<div className="text-center">
+					<p className="text-lg font-medium text-gray-900 mb-4">
+						Please select an organization
+					</p>
+					<Button onClick={() => (window.location.href = '/organizations')}>
+						Go to Organizations
+					</Button>
 				</div>
 			</div>
 		);
@@ -261,13 +234,15 @@ export default function DashboardPage() {
 					setFilters((prev) => ({ ...prev, search: value }))
 				}
 				onCreateBoardClick={() => {
-					if (isAdmin) {
+					if (isAdmin && selectedOrgId) {
 						setIsCreateDialogOpen(true);
 					}
 				}}
 				organizations={organizations}
 				selectedOrgId={selectedOrgId}
-				onOrgChange={(orgId) => setSelectedOrgId(orgId)}
+				onOrgChange={(orgId) => {
+					setSelectedOrgId(orgId);
+				}}
 			/>
 			<main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
 				<div className="mb-4 sm:mb-6">

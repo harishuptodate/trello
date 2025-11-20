@@ -16,14 +16,14 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useBoard } from '@/lib/hooks/useBoards';
-import type { Task, Column } from '@prisma/client';
+import type { Task, Column, TaskPriority } from '@prisma/client';
 import type { ColumnWithTasks } from '@/lib/services';
 import { DialogTitle, DialogTrigger } from '@radix-ui/react-dialog';
 import {
 	Calendar,
 	MoreHorizontal,
 	Plus,
-	User,
+	User as UserIcon,
 	Check,
 	X,
 	Trash2,
@@ -65,6 +65,36 @@ export type TaskData = {
 	checklist?: ChecklistItem[];
 };
 
+type OrganizationMemberWithUser = {
+	id: string;
+	userId: string;
+	role: 'ADMIN' | 'MEMBER';
+	user: {
+		id: string;
+		name: string | null;
+		email: string;
+		image: string | null;
+	};
+};
+
+type TaskFormProps = {
+	columnId: string;
+	boardId: string;
+	task?:
+		| (Task & {
+				assignee: {
+					id: string;
+					name: string | null;
+					email: string;
+					image: string | null;
+				} | null;
+		  })
+		| null;
+	onCreateTask?: (columnId: string, taskData: TaskData) => Promise<void>;
+	onUpdateTask?: (taskId: string, taskData: TaskData) => Promise<void>;
+	onClose: () => void;
+};
+
 function TaskForm({
 	columnId,
 	boardId,
@@ -72,17 +102,12 @@ function TaskForm({
 	onCreateTask,
 	onUpdateTask,
 	onClose,
-}: {
-	columnId: string;
-	boardId?: string;
-	task?: Task | null;
-	onCreateTask?: (columnId: string, taskData: TaskData) => Promise<void>;
-	onUpdateTask?: (taskId: string, taskData: TaskData) => Promise<void>;
-	onClose?: () => void;
-}) {
-	const [orgMembers, setOrgMembers] = useState<Array<{ user: { id: string; name: string | null; email: string; image: string | null } }>>>([]);
+}: TaskFormProps) {
+	const [orgMembers, setOrgMembers] = useState<OrganizationMemberWithUser[]>(
+		[],
+	);
 	const [loadingMembers, setLoadingMembers] = useState(false);
-	
+
 	useEffect(() => {
 		if (boardId || columnId) {
 			loadOrgMembers();
@@ -93,7 +118,7 @@ function TaskForm({
 		try {
 			setLoadingMembers(true);
 			let organizationId: string | null = null;
-			
+
 			if (boardId) {
 				// Direct board ID
 				const boardResponse = await fetch(`/api/boards/${boardId}`);
@@ -113,9 +138,11 @@ function TaskForm({
 					}
 				}
 			}
-			
+
 			if (organizationId) {
-				const membersResponse = await fetch(`/api/organizations/${organizationId}/members/list`);
+				const membersResponse = await fetch(
+					`/api/organizations/${organizationId}/members/list`,
+				);
 				if (membersResponse.ok) {
 					const members = await membersResponse.json();
 					setOrgMembers(members);
@@ -128,15 +155,15 @@ function TaskForm({
 		}
 	}
 
-	const isEditMode = !!task;
+	const isEditMode = !!(task && task.id && task.id.trim() !== '');
 	const [title, setTitle] = useState(task?.title || '');
 	const [description, setDescription] = useState(task?.description || '');
-	const [assigneeId, setAssigneeId] = useState(task?.assigneeId || '');
+	const [assigneeId, setAssigneeId] = useState(task?.assigneeId || 'none');
 	const [dueDate, setDueDate] = useState(
 		task?.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
 	);
 	const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(
-		task?.priority?.toLowerCase() as 'low' | 'medium' | 'high' || 'medium',
+		(task?.priority?.toLowerCase() as 'low' | 'medium' | 'high') || 'medium',
 	);
 	const [checklist, setChecklist] = useState<ChecklistItem[]>(
 		(task?.checklist as ChecklistItem[]) || [],
@@ -161,17 +188,24 @@ function TaskForm({
 		const taskData: TaskData = {
 			title: title.trim(),
 			description: description.trim() || undefined,
-			assigneeId: assigneeId || undefined,
+			assigneeId: assigneeId && assigneeId !== 'none' ? assigneeId : undefined,
 			dueDate: dueDate || undefined,
 			priority,
 			checklist: validChecklist.length > 0 ? validChecklist : undefined,
 		};
 
 		try {
-			if (isEditMode && task && onUpdateTask) {
+			if (isEditMode && task?.id && onUpdateTask) {
 				await onUpdateTask(task.id, taskData);
-			} else if (onCreateTask) {
+			} else if (!isEditMode && onCreateTask) {
 				await onCreateTask(columnId, taskData);
+			} else {
+				console.error('Missing required handler:', {
+					isEditMode,
+					hasOnUpdateTask: !!onUpdateTask,
+					hasOnCreateTask: !!onCreateTask,
+				});
+				return;
 			}
 			// Close dialog
 			if (onClose) {
@@ -211,7 +245,7 @@ function TaskForm({
 				<Input
 					id="title"
 					className="selection:bg-gray-500 selection:text-white"
-					autoFocus={true} 
+					autoFocus={true}
 					value={title}
 					onChange={(e) => setTitle(e.target.value)}
 					placeholder="Enter task title..."
@@ -235,12 +269,15 @@ function TaskForm({
 						<SelectValue placeholder="Select assignee..." />
 					</SelectTrigger>
 					<SelectContent>
-						<SelectItem value="">None</SelectItem>
-						{orgMembers.map((member) => (
-							<SelectItem key={member.user.id} value={member.user.id}>
-								{member.user.name || member.user.email}
-							</SelectItem>
-						))}
+						<SelectItem value="none">None</SelectItem>
+						{orgMembers.length > 0 &&
+							orgMembers.map((member) => {
+								return (
+									<SelectItem key={member.user.id} value={member.user.id}>
+										{member.user.name || member.user.email || 'No assignee'}
+									</SelectItem>
+								);
+							})}
 					</SelectContent>
 				</Select>
 			</div>
@@ -315,9 +352,7 @@ function TaskForm({
 						{/* Checklist Items */}
 						<div className="space-y-2 max-h-60 overflow-y-auto">
 							{checklist.map((item, index) => (
-								<div
-									key={index}
-									className="flex items-center gap-2">
+								<div key={index} className="flex items-center gap-2">
 									<input
 										type="checkbox"
 										checked={item.completed}
@@ -354,7 +389,7 @@ function TaskForm({
 			</div>
 
 			<div className="flex justify-end space-x-2 pt-4">
-				<Button type="submit">
+				<Button type="submit" disabled={!title.trim()}>
 					{isEditMode ? 'Update Task' : 'Create Task'}
 				</Button>
 			</div>
@@ -423,7 +458,13 @@ function DroppableColumn({
 									Add a new task to the board.
 								</p>
 							</DialogHeader>
-							<TaskForm columnId={column.id} boardId={board?.id} onCreateTask={onCreateTask} />
+							<TaskForm
+								columnId={column.id}
+								boardId={column.boardId}
+								task={null}
+								onCreateTask={onCreateTask}
+								onClose={() => {}}
+							/>
 						</DialogContent>
 					</Dialog>
 				</div>
@@ -436,8 +477,24 @@ function SortableTask({
 	task,
 	onEditTask,
 }: {
-	task: Task;
-	onEditTask?: (task: Task) => void;
+	task: Task & {
+		assignee: {
+			id: string;
+			name: string | null;
+			email: string;
+			image: string | null;
+		} | null;
+	};
+	onEditTask?: (
+		task: Task & {
+			assignee: {
+				id: string;
+				name: string | null;
+				email: string;
+				image: string | null;
+			} | null;
+		},
+	) => void;
 }) {
 	const {
 		attributes,
@@ -466,9 +523,11 @@ function SortableTask({
 	}
 
 	// Calculate checklist progress
-	const checklist = task.checklist || [];
-	const completedCount = checklist.filter((item) => item.completed).length;
-	const totalCount = checklist.length;
+	const checklist = (task.checklist as ChecklistItem[]) || [];
+	const completedCount = checklist.filter(
+		(item: ChecklistItem) => item.completed,
+	).length;
+	const totalCount = checklist.length as number;
 	const progressPercentage =
 		totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 	const isComplete = totalCount > 0 && completedCount === totalCount;
@@ -536,9 +595,11 @@ function SortableTask({
 							<div className="flex items-center space-x-1 sm:space-x-2 min-w-0">
 								{task.assignee && (
 									<div className="flex items-center space-x-1 text-xs text-gray-600 min-w-0">
-										<User className="w-3 h-3 shrink-0" />
+										<UserIcon className="w-3 h-3 shrink-0" />
 										<span className="truncate italic">
-											{task.assignee.name || task.assignee.email || 'No assignee'}
+											{task.assignee.name ||
+												task.assignee.email ||
+												'No assignee'}
 										</span>
 									</div>
 								)}
@@ -564,7 +625,18 @@ function SortableTask({
 	);
 }
 
-function TaskOverlay({ task }: { task: Task }) {
+function TaskOverlay({
+	task,
+}: {
+	task: Task & {
+		assignee: {
+			id: string;
+			name: string | null;
+			email: string;
+			image: string | null;
+		} | null;
+	};
+}) {
 	function getPriorityColor(priority: 'low' | 'medium' | 'high'): string {
 		switch (priority) {
 			case 'high':
@@ -598,9 +670,11 @@ function TaskOverlay({ task }: { task: Task }) {
 							<div className="flex items-center space-x-1 sm:space-x-2 min-w-0">
 								{task.assignee && (
 									<div className="flex items-center space-x-1 text-xs text-gray-600 min-w-0">
-										<User className="w-3 h-3 shrink-0" />
+										<UserIcon className="w-3 h-3 shrink-0" />
 										<span className="truncate italic">
-											{task.assignee.name || task.assignee.email || 'No assignee'}
+											{task.assignee.name ||
+												task.assignee.email ||
+												'No assignee'}
 										</span>
 									</div>
 								)}
@@ -643,13 +717,33 @@ export default function BoardPage() {
 	const [newTitle, setNewTitle] = useState('');
 	const [newColor, setNewColor] = useState('');
 
-	const [activeTask, setActiveTask] = useState<Task | null>(null);
+	const [activeTask, setActiveTask] = useState<
+		| (Task & {
+				assignee: {
+					id: string;
+					name: string | null;
+					email: string;
+					image: string | null;
+				} | null;
+		  })
+		| null
+	>(null);
 
 	const [isFilterOpen, setIsFilterOpen] = useState(false);
 	const [isCreatingColumn, setIsCreatingColumn] = useState(false);
 	const [isEditingColumn, setIsEditingColumn] = useState(false);
 	const [isEditingTask, setIsEditingTask] = useState(false);
-	const [editingTask, setEditingTask] = useState<Task | null>(null);
+	const [editingTask, setEditingTask] = useState<
+		| (Task & {
+				assignee: {
+					id: string;
+					name: string | null;
+					email: string;
+					image: string | null;
+				} | null;
+		  })
+		| null
+	>(null);
 
 	const [newColumnTitle, setNewColumnTitle] = useState('');
 	const [editingColumnTitle, setEditingColumnTitle] = useState('');
@@ -712,7 +806,16 @@ export default function BoardPage() {
 		}
 	}
 
-	function handleEditTask(task: Task) {
+	function handleEditTask(
+		task: Task & {
+			assignee: {
+				id: string;
+				name: string | null;
+				email: string;
+				image: string | null;
+			} | null;
+		},
+	) {
 		setEditingTask(task);
 		setIsEditingTask(true);
 	}
@@ -720,14 +823,14 @@ export default function BoardPage() {
 	async function handleUpdateTask(taskId: string, taskData: TaskData) {
 		if (!updateRealTask) return;
 		try {
-		await updateRealTask(taskId, {
-			title: taskData.title,
-			description: taskData.description ?? null,
-			assigneeId: taskData.assigneeId ?? null,
-			dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
-			priority: taskData.priority.toUpperCase() as 'LOW' | 'MEDIUM' | 'HIGH',
-			checklist: taskData.checklist || null,
-		});
+			await updateRealTask(taskId, {
+				title: taskData.title,
+				description: taskData.description ?? null,
+				assigneeId: taskData.assigneeId ?? null,
+				dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
+				priority: taskData.priority.toUpperCase() as 'LOW' | 'MEDIUM' | 'HIGH',
+				checklist: taskData.checklist || null,
+			});
 			setIsEditingTask(false);
 			setEditingTask(null);
 		} catch (error) {
@@ -742,7 +845,16 @@ export default function BoardPage() {
 			.find((task) => task.id === taskId);
 
 		if (task) {
-			setActiveTask(task);
+			setActiveTask(
+				task as Task & {
+					assignee: {
+						id: string;
+						name: string | null;
+						email: string;
+						image: string | null;
+					} | null;
+				},
+			);
 		}
 	}
 
@@ -1183,7 +1295,7 @@ export default function BoardPage() {
 										items={column.tasks.map((task: Task) => task.id)}
 										strategy={verticalListSortingStrategy}>
 										<div className="space-y-3">
-											{column.tasks.map((task: Task, key: number) => (
+											{column.tasks.map((task, key: number) => (
 												<SortableTask
 													task={task}
 													key={key}
@@ -1295,10 +1407,10 @@ export default function BoardPage() {
 							Update task details and checklist.
 						</p>
 					</DialogHeader>
-					{editingTask && (
+					{editingTask && board?.id && (
 						<TaskForm
 							columnId={editingTask.columnId}
-							boardId={board?.id}
+							boardId={board.id}
 							task={editingTask}
 							onUpdateTask={handleUpdateTask}
 							onClose={() => {
