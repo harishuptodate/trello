@@ -1,47 +1,49 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-	boardDataService,
-	boardService,
-	columnService,
-	taskService,
-} from '../services';
-import { useUser } from '@clerk/nextjs';
-import { Board, Column, ColumnWithTasks, Task } from '../supabase/models';
-import { useSupabase } from '../supabase/SupabaseProvider';
-import { TaskData } from '@/app/boards/[id]/page';
+import { useSession } from 'next-auth/react';
+import { useOrganization } from '../organization-context';
+import type { Board, Column, Task } from '@prisma/client';
+import type { ColumnWithTasks, BoardWithColumns } from '../services';
+import type { TaskData } from '@/app/boards/[id]/page';
 
-export function useBoards() {
-	const { user } = useUser();
-	const { supabase } = useSupabase();
-	const [boards, setBoards] = useState<Board[]>([]);
+export type BoardType = Board & {
+	createdBy: {
+		id: string;
+		name: string | null;
+		email: string;
+	};
+};
+
+export function useBoards(organizationId?: string | null) {
+	const { data: session } = useSession();
+	const { selectedOrgId } = useOrganization();
+	const orgId = organizationId || selectedOrgId;
+
+	const [boards, setBoards] = useState<BoardType[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	useEffect(() => {
-		if (user) {
-			loadBoards();
-		}
-	}, [user, supabase]);
-
 	const loadBoards = useCallback(async () => {
-		if (!user) return;
+		if (!orgId || !session?.user) return;
+
 		try {
 			setLoading(true);
 			setError(null);
-			const data = await boardService.getBoards(supabase!, user.id);
+			const response = await fetch(`/api/boards?organizationId=${orgId}`);
+			if (!response.ok) throw new Error('Failed to load boards');
+			const data = await response.json();
 			setBoards(data);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to create board.');
+			setError(err instanceof Error ? err.message : 'Failed to load boards.');
 		} finally {
 			setLoading(false);
 		}
-	}, [user, supabase]);
+	}, [orgId, session]);
 
 	useEffect(() => {
-		if (user) {
+		if (orgId && session?.user) {
 			loadBoards();
 		}
-	}, [user, loadBoards]);
+	}, [orgId, session, loadBoards]);
 
 	async function createBoard(boardData: {
 		title: string;
@@ -49,76 +51,109 @@ export function useBoards() {
 		color?: string;
 		createDefaultColumns?: boolean;
 	}) {
-		if (!user) throw new Error('User not authenticated');
+		if (!orgId || !session?.user) throw new Error('User not authenticated');
+
 		try {
-			const newBoard = await boardDataService.createBoardWithDefaultColumns(
-				supabase!,
-				{ ...boardData, userId: user.id },
-			);
+			const response = await fetch('/api/boards', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					...boardData,
+					organizationId: orgId,
+				}),
+			});
+
+			if (!response.ok) {
+				const error = await response.json();
+				throw new Error(error.error || 'Failed to create board');
+			}
+
+			const newBoard = await response.json();
 			setBoards((prev) => [newBoard, ...prev]);
-			console.log('Board created:', newBoard);
 			return newBoard;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to create board');
+			throw err;
 		}
 	}
 
 	async function updateBoard(boardId: string, updates: Partial<Board>) {
 		try {
-			const updatedBoard = await boardService.updateBoard(
-				supabase!,
-				boardId,
-				updates,
-			);
+			const response = await fetch(`/api/boards/${boardId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(updates),
+			});
+
+			if (!response.ok) throw new Error('Failed to update board');
+
+			const updatedBoard = await response.json();
 			setBoards((prev) =>
 				prev.map((board) => (board.id === boardId ? updatedBoard : board)),
 			);
 			return updatedBoard;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to update board');
+			throw err;
 		}
 	}
 
 	async function deleteBoard(boardId: string) {
 		try {
-			await boardService.deleteBoard(supabase!, boardId);
+			const response = await fetch(`/api/boards/${boardId}`, {
+				method: 'DELETE',
+			});
+
+			if (!response.ok) throw new Error('Failed to delete board');
+
 			setBoards((prev) => prev.filter((board) => board.id !== boardId));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to delete board');
+			throw err;
 		}
 	}
 
-	return { boards, loading, error, createBoard, updateBoard, deleteBoard };
+	return {
+		boards,
+		loading,
+		error,
+		createBoard,
+		updateBoard,
+		deleteBoard,
+		refetch: loadBoards,
+	};
 }
 
 export function useBoard(boardId: string) {
-	const { user } = useUser();
-	const { supabase } = useSupabase();
-	const [board, setBoard] = useState<Board | null>(null);
+	const { data: session } = useSession();
+	const [board, setBoard] = useState<BoardWithColumns | null>(null);
 	const [columns, setColumns] = useState<ColumnWithTasks[]>([]);
-
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
-		if (boardId) {
+		if (boardId && session?.user) {
 			loadBoard();
 		}
-	}, [boardId, supabase]);
+	}, [boardId, session]);
 
 	async function loadBoard() {
 		if (!boardId) return;
 		try {
 			setLoading(true);
 			setError(null);
-			const data = await boardDataService.getBoardWithColumns(
-				supabase!,
-				boardId,
-			);
-			setBoard(data.board);
-			setColumns(data.columnsWithTasks);
+			const response = await fetch(`/api/boards/${boardId}`);
+			if (!response.ok) throw new Error('Failed to load board');
+
+			const boardData = await response.json();
+			const fullBoard = await fetch(`/api/boards/${boardId}/full`)
+				.then((r) => r.json())
+				.catch(() => boardData);
+
+			setBoard(fullBoard);
+			setColumns(fullBoard.columns || []);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to create board.');
+			setError(err instanceof Error ? err.message : 'Failed to load board.');
 		} finally {
 			setLoading(false);
 		}
@@ -126,33 +161,42 @@ export function useBoard(boardId: string) {
 
 	async function updateBoard(boardId: string, updates: Partial<Board>) {
 		try {
-			const updatedBoard = await boardService.updateBoard(
-				supabase!,
-				boardId,
-				updates,
-			);
-			setBoard(updatedBoard);
+			const response = await fetch(`/api/boards/${boardId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(updates),
+			});
+
+			if (!response.ok) throw new Error('Failed to update board');
+
+			const updatedBoard = await response.json();
+			setBoard((prev) => (prev ? { ...prev, ...updatedBoard } : null));
 			return updatedBoard;
 		} catch (err) {
 			setError(
 				err instanceof Error ? err.message : 'Failed to update the board.',
 			);
+			throw err;
 		}
 	}
+
 	async function createRealTask(columnId: string, taskData: TaskData) {
 		try {
-			const newTask = await taskService.createTask(supabase!, {
-				title: taskData.title,
-				description: taskData.description ?? null,
-				assignee: taskData.assignee ?? null,
-				due_date: taskData.dueDate ?? null,
-				column_id: columnId,
-				priority: taskData.priority ?? 'medium',
-				sort_order:
-					columns.find((col) => col.id === columnId)?.tasks.length || 0, // why + 1 ? // ans: because the sort_order is the index of the column in the columns array, cant we do tasks.length || 0 ? // ans: because the tasks.length is the number of tasks in the column, not the sort_order
-				checklist: taskData.checklist || null,
-			} as Omit<Task, 'id' | 'created_at' | 'updated_at'>);
+			const response = await fetch('/api/tasks', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					...taskData,
+					columnId,
+					priority: taskData.priority?.toUpperCase() || 'MEDIUM',
+					sortOrder:
+						columns.find((col) => col.id === columnId)?.tasks.length || 0,
+				}),
+			});
 
+			if (!response.ok) throw new Error('Failed to create task');
+
+			const newTask = await response.json();
 			setColumns((prev) =>
 				prev.map((col) =>
 					col.id === columnId
@@ -164,6 +208,7 @@ export function useBoard(boardId: string) {
 			return newTask;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to create task.');
+			throw err;
 		}
 	}
 
@@ -173,13 +218,18 @@ export function useBoard(boardId: string) {
 		newSortOrder: number,
 	) {
 		try {
-			await taskService.moveTask(supabase!, taskId, newColumnId, newSortOrder);
+			const response = await fetch(`/api/tasks/${taskId}/move`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ newColumnId, newSortOrder }),
+			});
+
+			if (!response.ok) throw new Error('Failed to move task');
 
 			setColumns((prev) => {
 				const newColumns = [...prev];
-
-				// Find and remove task from the old column
 				let taskToMove: Task | null = null;
+
 				for (const col of newColumns) {
 					const taskIndex = col.tasks.findIndex((task) => task.id === taskId);
 					if (taskIndex !== -1) {
@@ -190,7 +240,6 @@ export function useBoard(boardId: string) {
 				}
 
 				if (taskToMove) {
-					// Add task to new column
 					const targetColumn = newColumns.find((col) => col.id === newColumnId);
 					if (targetColumn) {
 						targetColumn.tasks.splice(newSortOrder, 0, taskToMove);
@@ -201,32 +250,45 @@ export function useBoard(boardId: string) {
 			});
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to move task.');
+			throw err;
 		}
 	}
+
 	async function createRealColumn(columnTitle: string) {
 		if (!boardId || !board) throw new Error('Board not loaded');
 		try {
-			const newColumn = await columnService.createColumn(supabase!, {
-				title: columnTitle,
-				sort_order: columns.length,
-				board_id: boardId,
-				user_id: board?.user_id ?? '',
+			const response = await fetch('/api/columns', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					title: columnTitle,
+					sortOrder: columns.length,
+					boardId: boardId,
+				}),
 			});
+
+			if (!response.ok) throw new Error('Failed to create column');
+
+			const newColumn = await response.json();
 			setColumns((prev) => [...prev, { ...newColumn, tasks: [] }]);
 			return newColumn;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to create column.');
-		} finally {
-			setLoading(false);
+			throw err;
 		}
 	}
+
 	async function updateRealColumn(columnId: string, title: string) {
 		try {
-			const updatedColumn = await columnService.updateColumnTitle(
-				supabase!,
-				columnId,
-				title,
-			);
+			const response = await fetch(`/api/columns/${columnId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ title }),
+			});
+
+			if (!response.ok) throw new Error('Failed to update column');
+
+			const updatedColumn = await response.json();
 			setColumns((prev) =>
 				prev.map((col) =>
 					col.id === columnId ? { ...col, ...updatedColumn } : col,
@@ -235,16 +297,21 @@ export function useBoard(boardId: string) {
 			return updatedColumn;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to update column.');
+			throw err;
 		}
 	}
 
 	async function updateRealTask(taskId: string, updates: Partial<Task>) {
 		try {
-			const updatedTask = await taskService.updateTask(
-				supabase!,
-				taskId,
-				updates,
-			);
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(updates),
+			});
+
+			if (!response.ok) throw new Error('Failed to update task');
+
+			const updatedTask = await response.json();
 			setColumns((prev) =>
 				prev.map((col) => ({
 					...col,
@@ -256,6 +323,7 @@ export function useBoard(boardId: string) {
 			return updatedTask;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to update task.');
+			throw err;
 		}
 	}
 
@@ -271,5 +339,6 @@ export function useBoard(boardId: string) {
 		moveTask,
 		updateRealColumn,
 		updateRealTask,
+		refetch: loadBoard,
 	};
 }

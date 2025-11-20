@@ -1,241 +1,421 @@
-import { Board, Column, Task } from './supabase/models';
-import { SupabaseClient } from '@supabase/supabase-js';
+import { prisma } from './prisma';
+import type { Board, Column, Task } from '@prisma/client';
+
+export type BoardWithColumns = Board & {
+	columns: (Column & {
+		tasks: Task[];
+	})[];
+};
+
+export type ColumnWithTasks = Column & {
+	tasks: Task[];
+};
 
 export const boardService = {
-	async getBoard(supabase: SupabaseClient, boardId: string): Promise<Board> {
-		const { data, error } = await supabase
-			.from('boards')
-			.select('*')
-			.eq('id', boardId)
-			.single();
-		if (error) throw error;
-
-		return data;
+	async getBoard(boardId: string) {
+		const board = await prisma.board.findUnique({
+			where: { id: boardId },
+			include: {
+				organization: true,
+				createdBy: {
+					select: {
+						id: true,
+						name: true,
+						email: true,
+					},
+				},
+			},
+		});
+		if (!board) throw new Error('Board not found');
+		return board;
 	},
 
-	async getBoards(supabase: SupabaseClient, userId: string): Promise<Board[]> {
-		const { data, error } = await supabase
-			.from('boards')
-			.select('*')
-			.eq('user_id', userId);
-		if (error) throw error;
-
-		return data || [];
+	async getBoardsByOrganization(organizationId: string) {
+		return prisma.board.findMany({
+			where: { organizationId },
+			orderBy: { updatedAt: 'desc' },
+			include: {
+				createdBy: {
+					select: {
+						id: true,
+						name: true,
+						email: true,
+					},
+				},
+			},
+		});
 	},
 
-	async createBoard(
-		supabase: SupabaseClient,
-		board: Omit<Board, 'id' | 'created_at' | 'updated_at'>,
-	): Promise<Board> {
-		const { data, error } = await supabase
-			.from('boards')
-			.insert(board)
-			.select()
-			.single();
-
-		if (error) throw error;
-
-		return data;
+	async createBoard(boardData: {
+		title: string;
+		description?: string;
+		color?: string;
+		organizationId: string;
+		createdById: string;
+	}) {
+		return prisma.board.create({
+			data: {
+				title: boardData.title,
+				description: boardData.description || null,
+				color: boardData.color || 'bg-blue-500',
+				organizationId: boardData.organizationId,
+				createdById: boardData.createdById,
+			},
+		});
 	},
 
-	async updateBoard(
-		supabase: SupabaseClient,
-		boardId: string,
-		updates: Partial<Board>,
-	): Promise<Board> {
-		const { data, error } = await supabase
-			.from('boards')
-			.update({ ...updates, updated_at: new Date().toISOString() })
-			.eq('id', boardId)
-			.single();
-
-		if (error) throw error;
-
-		return data;
+	async updateBoard(boardId: string, updates: Partial<Board>) {
+		return prisma.board.update({
+			where: { id: boardId },
+			data: updates,
+		});
 	},
 
-	async deleteBoard(supabase: SupabaseClient, boardId: string): Promise<void> {
-		const { error } = await supabase.from('boards').delete().eq('id', boardId);
-
-		if (error) throw error;
+	async deleteBoard(boardId: string) {
+		return prisma.board.delete({
+			where: { id: boardId },
+		});
 	},
 };
 
 export const columnService = {
-	async getColumns(
-		supabase: SupabaseClient,
-		boardId: string,
-	): Promise<Column[]> {
-		const { data, error } = await supabase
-			.from('columns')
-			.select('*')
-			.eq('board_id', boardId)
-			.order('sort_order', { ascending: true });
-
-		if (error) throw error;
-
-		return data || [];
+	async getColumns(boardId: string) {
+		return prisma.column.findMany({
+			where: { boardId },
+			orderBy: { sortOrder: 'asc' },
+		});
 	},
 
-	async createColumn(
-		supabase: SupabaseClient,
-		column: Omit<Column, 'id' | 'created_at' | 'color'> & { color?: string },
-	): Promise<Column> {
-		const { data, error } = await supabase
-			.from('columns')
-			.insert(column)
-			.select()
-			.single();
-
-		if (error) throw error;
-
-		return data;
+	async createColumn(columnData: {
+		title: string;
+		sortOrder: number;
+		boardId: string;
+	}) {
+		return prisma.column.create({
+			data: columnData,
+		});
 	},
 
-	async updateColumnTitle(
-		supabase: SupabaseClient,
-		columnId: string,
-		title: string,
-	): Promise<Column> {
-		const { data, error } = await supabase
-			.from('columns')
-			.update({ title })
-			.eq('id', columnId)
-			.select()
-			.single();
+	async updateColumn(columnId: string, updates: Partial<Column>) {
+		return prisma.column.update({
+			where: { id: columnId },
+			data: updates,
+		});
+	},
 
-		if (error) throw error;
-		return data;
+	async deleteColumn(columnId: string) {
+		return prisma.column.delete({
+			where: { id: columnId },
+		});
 	},
 };
 
 export const taskService = {
-	async getTasksByBoardId(
-		supabase: SupabaseClient,
-		boardId: string,
-	): Promise<Task[]> {
-		const { data, error } = await supabase
-			.from('tasks')
-			.select(
-				`
-				*,
-				columns!inner(board_id)
-				`,
-			)
-			.eq('columns.board_id', boardId)
-			.order('sort_order', { ascending: true });
+	async getTasksByBoardId(boardId: string) {
+		const columns = await prisma.column.findMany({
+			where: { boardId },
+			include: {
+				tasks: {
+					orderBy: { sortOrder: 'asc' },
+					include: {
+						assignee: {
+							select: {
+								id: true,
+								name: true,
+								email: true,
+								image: true,
+							},
+						},
+					},
+				},
+			},
+		});
 
-		if (error) throw error;
-
-		return data || [];
+		return columns.flatMap((col) => col.tasks);
 	},
 
-	async createTask(
-		supabase: SupabaseClient,
-		task: Omit<Task, 'id' | 'created_at' | 'updated_at'>,
-	): Promise<Task> {
-		const { data, error } = await supabase
-			.from('tasks')
-			.insert(task)
-			.select()
-			.single();
-
-		if (error) throw error;
-
-		return data;
+	async createTask(taskData: {
+		title: string;
+		description?: string;
+		assigneeId?: string;
+		dueDate?: Date;
+		priority: 'LOW' | 'MEDIUM' | 'HIGH';
+		checklist?: any;
+		sortOrder: number;
+		columnId: string;
+	}) {
+		return prisma.task.create({
+			data: {
+				title: taskData.title,
+				description: taskData.description || null,
+				assigneeId: taskData.assigneeId || null,
+				dueDate: taskData.dueDate || null,
+				priority: taskData.priority,
+				checklist: taskData.checklist || null,
+				sortOrder: taskData.sortOrder,
+				columnId: taskData.columnId,
+			},
+			include: {
+				assignee: {
+					select: {
+						id: true,
+						name: true,
+						email: true,
+						image: true,
+					},
+				},
+			},
+		});
 	},
 
-	async moveTask(
-		supabase: SupabaseClient,
-		taskId: string,
-		newColumnId: string,
-		newSortOrder: number,
-	) {
-		const { data, error } = await supabase
-			.from('tasks')
-			.update({ column_id: newColumnId, sort_order: newSortOrder })
-			.eq('id', taskId);
-
-		if (error) throw error;
-
-		return data;
+	async moveTask(taskId: string, newColumnId: string, newSortOrder: number) {
+		return prisma.task.update({
+			where: { id: taskId },
+			data: {
+				columnId: newColumnId,
+				sortOrder: newSortOrder,
+			},
+		});
 	},
 
-	async updateTask(
-		supabase: SupabaseClient,
-		taskId: string,
-		updates: Partial<Task>,
-	): Promise<Task> {
-		const { data, error } = await supabase
-			.from('tasks')
-			.update(updates)
-			.eq('id', taskId)
-			.select()
-			.single();
+	async updateTask(taskId: string, updates: Partial<Task>) {
+		return prisma.task.update({
+			where: { id: taskId },
+			data: updates,
+			include: {
+				assignee: {
+					select: {
+						id: true,
+						name: true,
+						email: true,
+						image: true,
+					},
+				},
+			},
+		});
+	},
 
-		if (error) throw error;
-
-		return data;
+	async deleteTask(taskId: string) {
+		return prisma.task.delete({
+			where: { id: taskId },
+		});
 	},
 };
 
 export const boardDataService = {
-	async getBoardWithColumns(supabase: SupabaseClient, boardId: string) {
-		const [board, columns] = await Promise.all([
-			boardService.getBoard(supabase, boardId),
-			columnService.getColumns(supabase, boardId),
-		]);
-		if (!board) throw new Error('Board not found');
-
-		const tasks = await taskService.getTasksByBoardId(supabase, boardId);
-
-		const columnsWithTasks = columns.map((column) => ({
-			...column,
-			tasks: tasks.filter((task) => task.column_id === column.id),
-		}));
-
-		return {
-			board,
-			columnsWithTasks,
-		};
-	},
-	async createBoardWithDefaultColumns(
-		supabase: SupabaseClient,
-		boardData: {
-			title: string;
-			description?: string;
-			color?: string;
-			userId: string;
-			createDefaultColumns?: boolean;
-		},
-	) {
-		const board = await boardService.createBoard(supabase, {
-			title: boardData.title,
-			description: boardData.description || null,
-			color: boardData.color || 'bg-blue-500',
-			user_id: boardData.userId,
+	async getBoardWithColumns(boardId: string): Promise<BoardWithColumns> {
+		const board = await prisma.board.findUnique({
+			where: { id: boardId },
+			include: {
+				columns: {
+					orderBy: { sortOrder: 'asc' },
+					include: {
+						tasks: {
+							orderBy: { sortOrder: 'asc' },
+							include: {
+								assignee: {
+									select: {
+										id: true,
+										name: true,
+										email: true,
+										image: true,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		});
 
-		// Only create default columns if explicitly requested
+		if (!board) throw new Error('Board not found');
+
+		return board as BoardWithColumns;
+	},
+
+	async createBoardWithDefaultColumns(boardData: {
+		title: string;
+		description?: string;
+		color?: string;
+		organizationId: string;
+		createdById: string;
+		createDefaultColumns?: boolean;
+	}) {
+		const board = await prisma.board.create({
+			data: {
+				title: boardData.title,
+				description: boardData.description || null,
+				color: boardData.color || 'bg-blue-500',
+				organizationId: boardData.organizationId,
+				createdById: boardData.createdById,
+			},
+		});
+
 		if (boardData.createDefaultColumns !== false) {
 			const defaultColumns = [
-				{ title: 'To Do', sort_order: 0 },
-				{ title: 'In Progress', sort_order: 1 },
-				{ title: 'Review', sort_order: 2 },
-				{ title: 'Done', sort_order: 3 },
+				{ title: 'To Do', sortOrder: 0 },
+				{ title: 'In Progress', sortOrder: 1 },
+				{ title: 'Review', sortOrder: 2 },
+				{ title: 'Done', sortOrder: 3 },
 			];
 
 			await Promise.all(
 				defaultColumns.map((column) =>
-					columnService.createColumn(supabase, {
-						...column,
-						board_id: board.id,
-						user_id: boardData.userId,
+					prisma.column.create({
+						data: {
+							...column,
+							boardId: board.id,
+						},
 					}),
 				),
 			);
 		}
 
 		return board;
+	},
+};
+
+export const organizationService = {
+	async getOrganization(orgId: string) {
+		return prisma.organization.findUnique({
+			where: { id: orgId },
+			include: {
+				members: {
+					include: {
+						user: {
+							select: {
+								id: true,
+								name: true,
+								email: true,
+								image: true,
+							},
+						},
+					},
+				},
+			},
+		});
+	},
+
+	async getUserOrganizations(userId: string) {
+		return prisma.organizationMember.findMany({
+			where: { userId },
+			include: {
+				organization: {
+					include: {
+						_count: {
+							select: {
+								members: true,
+								boards: true,
+							},
+						},
+					},
+				},
+			},
+			orderBy: { createdAt: 'desc' },
+		});
+	},
+
+	async createOrganization(data: {
+		name: string;
+		slug: string;
+		userId: string;
+	}) {
+		return prisma.organization.create({
+			data: {
+				name: data.name,
+				slug: data.slug,
+				members: {
+					create: {
+						userId: data.userId,
+						role: 'ADMIN',
+					},
+				},
+			},
+		});
+	},
+
+	async updateOrganization(
+		orgId: string,
+		updates: { name?: string; slug?: string },
+	) {
+		return prisma.organization.update({
+			where: { id: orgId },
+			data: updates,
+		});
+	},
+
+	async deleteOrganization(orgId: string) {
+		return prisma.organization.delete({
+			where: { id: orgId },
+		});
+	},
+};
+
+export const organizationMemberService = {
+	async addMember(
+		organizationId: string,
+		userId: string,
+		role: 'ADMIN' | 'MEMBER' = 'MEMBER',
+	) {
+		return prisma.organizationMember.create({
+			data: {
+				organizationId,
+				userId,
+				role,
+			},
+			include: {
+				user: {
+					select: {
+						id: true,
+						name: true,
+						email: true,
+						image: true,
+					},
+				},
+			},
+		});
+	},
+
+	async removeMember(organizationId: string, userId: string) {
+		return prisma.organizationMember.delete({
+			where: {
+				organizationId_userId: {
+					organizationId,
+					userId,
+				},
+			},
+		});
+	},
+
+	async updateMemberRole(
+		organizationId: string,
+		userId: string,
+		role: 'ADMIN' | 'MEMBER',
+	) {
+		return prisma.organizationMember.update({
+			where: {
+				organizationId_userId: {
+					organizationId,
+					userId,
+				},
+			},
+			data: { role },
+		});
+	},
+
+	async getOrganizationMembers(organizationId: string) {
+		return prisma.organizationMember.findMany({
+			where: { organizationId },
+			include: {
+				user: {
+					select: {
+						id: true,
+						name: true,
+						email: true,
+						image: true,
+					},
+				},
+			},
+		});
 	},
 };

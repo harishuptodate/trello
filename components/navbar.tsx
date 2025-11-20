@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
 	ArrowLeft,
 	ArrowRight,
@@ -8,19 +8,24 @@ import {
 	Trello,
 	Search,
 	Plus,
+	LogOut,
+	User,
+	ChevronDown,
 } from 'lucide-react';
-import {
-	SignInButton,
-	SignUpButton,
-	SignOutButton,
-	useUser,
-	UserButton,
-} from '@clerk/nextjs';
+import { useSession, signOut } from 'next-auth/react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from './ui/select';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useOrganization } from '@/lib/organization-context';
 
 type NavbarProps = {
 	boardTitle?: string;
@@ -31,6 +36,9 @@ type NavbarProps = {
 	searchValue?: string;
 	onSearchChange?: (value: string) => void;
 	onCreateBoardClick?: () => void;
+	organizations?: Array<{ id: string; name: string; organization: any }>;
+	selectedOrgId?: string | null;
+	onOrgChange?: (orgId: string) => void;
 };
 
 export default function Navbar({
@@ -41,12 +49,25 @@ export default function Navbar({
 	searchValue = '',
 	onSearchChange,
 	onCreateBoardClick,
+	organizations = [],
+	selectedOrgId,
+	onOrgChange,
 }: NavbarProps) {
-	const { isSignedIn, user } = useUser();
+	const { data: session } = useSession();
 	const pathname = usePathname();
+	const router = useRouter();
+	const { selectedOrgId: contextOrgId, setSelectedOrgId } = useOrganization();
+	const [userMenuOpen, setUserMenuOpen] = useState(false);
 
 	const isDashboardPage = pathname === '/dashboard';
 	const isBoardPage = pathname.startsWith('/boards/');
+	const isSignedIn = !!session;
+
+	const currentOrgId = selectedOrgId || contextOrgId;
+
+	const handleSignOut = async () => {
+		await signOut({ callbackUrl: '/' });
+	};
 
 	if (isDashboardPage) {
 		return (
@@ -62,6 +83,25 @@ export default function Navbar({
 						</div>
 						{/* Center: Search Bar + Create Button */}
 						<div className="flex items-center gap-2 sm:gap-3 flex-1 justify-center max-w-2xl">
+							{organizations.length > 0 && (
+								<Select
+									value={currentOrgId || undefined}
+									onValueChange={(value) => {
+										setSelectedOrgId(value);
+										onOrgChange?.(value);
+									}}>
+									<SelectTrigger className="w-[180px] h-8">
+										<SelectValue placeholder="Select organization" />
+									</SelectTrigger>
+									<SelectContent>
+										{organizations.map((org) => (
+											<SelectItem key={org.id} value={org.organization.id}>
+												{org.organization.name}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							)}
 							<div className="relative flex-1 max-w-md">
 								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
 								<Input
@@ -81,9 +121,37 @@ export default function Navbar({
 								</Button>
 							)}
 						</div>
-						{/* UserButton */}
-						<div className="shrink-0">
-							<UserButton />
+						{/* User Menu */}
+						<div className="shrink-0 relative">
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-8 gap-2"
+								onClick={() => setUserMenuOpen(!userMenuOpen)}>
+								<User className="h-4 w-4" />
+								<span className="hidden sm:inline truncate max-w-[100px]">
+									{session?.user?.name || session?.user?.email?.split('@')[0]}
+								</span>
+								<ChevronDown className="h-4 w-4" />
+							</Button>
+							{userMenuOpen && (
+								<div className="absolute right-0 mt-2 w-48 bg-white border rounded-md shadow-lg z-50">
+									<div className="p-2 border-b">
+										<p className="text-sm font-medium truncate">
+											{session?.user?.name || 'User'}
+										</p>
+										<p className="text-xs text-gray-500 truncate">
+											{session?.user?.email}
+										</p>
+									</div>
+									<button
+										onClick={handleSignOut}
+										className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2">
+										<LogOut className="h-4 w-4" />
+										Sign Out
+									</button>
+								</div>
+							)}
 						</div>
 					</div>
 				</div>
@@ -142,8 +210,33 @@ export default function Navbar({
 									)}
 								</Button>
 							)}
-							<div className="shrink-0">
-								<UserButton />
+							<div className="shrink-0 relative">
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-8 gap-2"
+									onClick={() => setUserMenuOpen(!userMenuOpen)}>
+									<User className="h-4 w-4" />
+									<ChevronDown className="h-4 w-4" />
+								</Button>
+								{userMenuOpen && (
+									<div className="absolute right-0 mt-2 w-48 bg-white border rounded-md shadow-lg z-50">
+										<div className="p-2 border-b">
+											<p className="text-sm font-medium truncate">
+												{session?.user?.name || 'User'}
+											</p>
+											<p className="text-xs text-gray-500 truncate">
+												{session?.user?.email}
+											</p>
+										</div>
+										<button
+											onClick={handleSignOut}
+											className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2">
+											<LogOut className="h-4 w-4" />
+											Sign Out
+										</button>
+									</div>
+								)}
 							</div>
 						</div>
 					</div>
@@ -166,12 +259,11 @@ export default function Navbar({
 						<div className="flex flex-col sm:flex-row items-end sm:items-center space-y-1 sm:space-y-0">
 							<span className="text-xs sm:text-sm text-shadow-gray-600 hidden sm:block mr-2 sm:mr-4">
 								Welcome,{' '}
-								{user.firstName ??
-									user.emailAddresses[0].emailAddress
-										.split('@')[0]
-										.charAt(0)
-										.toUpperCase() +
-										user.emailAddresses[0].emailAddress.split('@')[0].slice(1)}
+								{session?.user?.name ||
+									(session?.user?.email
+										? session.user.email.split('@')[0].charAt(0).toUpperCase() +
+										  session.user.email.split('@')[0].slice(1)
+										: 'User')}
 							</span>
 							<Link href="/dashboard">
 								<Button size="sm" className="text-xs sm:text-sm cursor-pointer">
@@ -181,19 +273,19 @@ export default function Navbar({
 						</div>
 					) : (
 						<div>
-							<SignInButton>
+							<Link href="/auth/signin">
 								<Button
 									variant="ghost"
 									size="sm"
 									className="text-sm sm:text-sm">
 									Sign In
 								</Button>
-							</SignInButton>
-							<SignUpButton>
+							</Link>
+							<Link href="/auth/signup">
 								<Button size="sm" className="text-xs sm:text-sm">
 									Sign Up
 								</Button>
-							</SignUpButton>
+							</Link>
 						</div>
 					)}
 				</div>

@@ -16,7 +16,8 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useBoard } from '@/lib/hooks/useBoards';
-import type { Board, ColumnWithTasks, Task } from '@/lib/supabase/models';
+import type { Task, Column } from '@prisma/client';
+import type { ColumnWithTasks } from '@/lib/services';
 import { DialogTitle, DialogTrigger } from '@radix-ui/react-dialog';
 import {
 	Calendar,
@@ -58,7 +59,7 @@ export type ChecklistItem = {
 export type TaskData = {
 	title: string;
 	description?: string;
-	assignee?: string;
+	assigneeId?: string;
 	dueDate?: string;
 	priority: 'low' | 'medium' | 'high';
 	checklist?: ChecklistItem[];
@@ -66,29 +67,79 @@ export type TaskData = {
 
 function TaskForm({
 	columnId,
+	boardId,
 	task,
 	onCreateTask,
 	onUpdateTask,
 	onClose,
 }: {
 	columnId: string;
+	boardId?: string;
 	task?: Task | null;
 	onCreateTask?: (columnId: string, taskData: TaskData) => Promise<void>;
 	onUpdateTask?: (taskId: string, taskData: TaskData) => Promise<void>;
 	onClose?: () => void;
 }) {
+	const [orgMembers, setOrgMembers] = useState<Array<{ user: { id: string; name: string | null; email: string; image: string | null } }>>>([]);
+	const [loadingMembers, setLoadingMembers] = useState(false);
+	
+	useEffect(() => {
+		if (boardId || columnId) {
+			loadOrgMembers();
+		}
+	}, [boardId, columnId]);
+
+	async function loadOrgMembers() {
+		try {
+			setLoadingMembers(true);
+			let organizationId: string | null = null;
+			
+			if (boardId) {
+				// Direct board ID
+				const boardResponse = await fetch(`/api/boards/${boardId}`);
+				if (boardResponse.ok) {
+					const board = await boardResponse.json();
+					organizationId = board.organizationId;
+				}
+			} else if (columnId) {
+				// Get board ID from column
+				const response = await fetch(`/api/columns/${columnId}`);
+				if (response.ok) {
+					const column = await response.json();
+					const boardResponse = await fetch(`/api/boards/${column.boardId}`);
+					if (boardResponse.ok) {
+						const board = await boardResponse.json();
+						organizationId = board.organizationId;
+					}
+				}
+			}
+			
+			if (organizationId) {
+				const membersResponse = await fetch(`/api/organizations/${organizationId}/members/list`);
+				if (membersResponse.ok) {
+					const members = await membersResponse.json();
+					setOrgMembers(members);
+				}
+			}
+		} catch (err) {
+			console.error('Failed to load org members:', err);
+		} finally {
+			setLoadingMembers(false);
+		}
+	}
+
 	const isEditMode = !!task;
 	const [title, setTitle] = useState(task?.title || '');
 	const [description, setDescription] = useState(task?.description || '');
-	const [assignee, setAssignee] = useState(task?.assignee || '');
+	const [assigneeId, setAssigneeId] = useState(task?.assigneeId || '');
 	const [dueDate, setDueDate] = useState(
-		task?.due_date ? task.due_date.split('T')[0] : '',
+		task?.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
 	);
 	const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(
-		task?.priority || 'medium',
+		task?.priority?.toLowerCase() as 'low' | 'medium' | 'high' || 'medium',
 	);
 	const [checklist, setChecklist] = useState<ChecklistItem[]>(
-		task?.checklist || [],
+		(task?.checklist as ChecklistItem[]) || [],
 	);
 
 	// Calculate checklist progress
@@ -110,7 +161,7 @@ function TaskForm({
 		const taskData: TaskData = {
 			title: title.trim(),
 			description: description.trim() || undefined,
-			assignee: assignee.trim() || undefined,
+			assigneeId: assigneeId || undefined,
 			dueDate: dueDate || undefined,
 			priority,
 			checklist: validChecklist.length > 0 ? validChecklist : undefined,
@@ -179,12 +230,19 @@ function TaskForm({
 			</div>
 			<div className="space-y-2">
 				<Label>Assignee</Label>
-				<Input
-					id="assignee"
-					value={assignee}
-					onChange={(e) => setAssignee(e.target.value)}
-					placeholder="Enter task assignee..."
-				/>
+				<Select value={assigneeId} onValueChange={setAssigneeId}>
+					<SelectTrigger>
+						<SelectValue placeholder="Select assignee..." />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="">None</SelectItem>
+						{orgMembers.map((member) => (
+							<SelectItem key={member.user.id} value={member.user.id}>
+								{member.user.name || member.user.email}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
 			</div>
 			<div className="space-y-2">
 				<Label>Priority</Label>
@@ -365,7 +423,7 @@ function DroppableColumn({
 									Add a new task to the board.
 								</p>
 							</DialogHeader>
-							<TaskForm columnId={column.id} onCreateTask={onCreateTask} />
+							<TaskForm columnId={column.id} boardId={board?.id} onCreateTask={onCreateTask} />
 						</DialogContent>
 					</Dialog>
 				</div>
@@ -480,22 +538,22 @@ function SortableTask({
 									<div className="flex items-center space-x-1 text-xs text-gray-600 min-w-0">
 										<User className="w-3 h-3 shrink-0" />
 										<span className="truncate italic">
-											{task.assignee ?? 'No assignee'}
+											{task.assignee.name || task.assignee.email || 'No assignee'}
 										</span>
 									</div>
 								)}
-								{task.due_date && (
+								{task.dueDate && (
 									<div className="flex items-center space-x-1 text-xs text-gray-600 min-w-0">
 										<Calendar className="w-3 h-3 shrink-0" />
 										<span className="truncate">
-											{task.due_date ?? 'No due date'}
+											{new Date(task.dueDate).toLocaleDateString()}
 										</span>
 									</div>
 								)}
 							</div>
 							<div
 								className={`w-2 h-2 rounded-full shrink-0 ${getPriorityColor(
-									task.priority,
+									task.priority.toLowerCase() as 'low' | 'medium' | 'high',
 								)}`}
 							/>
 						</div>
@@ -542,22 +600,22 @@ function TaskOverlay({ task }: { task: Task }) {
 									<div className="flex items-center space-x-1 text-xs text-gray-600 min-w-0">
 										<User className="w-3 h-3 shrink-0" />
 										<span className="truncate italic">
-											{task.assignee ?? 'No assignee'}
+											{task.assignee.name || task.assignee.email || 'No assignee'}
 										</span>
 									</div>
 								)}
-								{task.due_date && (
+								{task.dueDate && (
 									<div className="flex items-center space-x-1 text-xs text-gray-600 min-w-0">
 										<Calendar className="w-3 h-3 shrink-0" />
 										<span className="truncate">
-											{task.due_date ?? 'No due date'}
+											{new Date(task.dueDate).toLocaleDateString()}
 										</span>
 									</div>
 								)}
 							</div>
 							<div
 								className={`w-2 h-2 rounded-full shrink-0 ${getPriorityColor(
-									task.priority,
+									task.priority.toLowerCase() as 'low' | 'medium' | 'high',
 								)}`}
 							/>
 						</div>
@@ -662,14 +720,14 @@ export default function BoardPage() {
 	async function handleUpdateTask(taskId: string, taskData: TaskData) {
 		if (!updateRealTask) return;
 		try {
-			await updateRealTask(taskId, {
-				title: taskData.title,
-				description: taskData.description ?? null,
-				assignee: taskData.assignee ?? null,
-				due_date: taskData.dueDate ?? null,
-				priority: taskData.priority,
-				checklist: taskData.checklist || null,
-			});
+		await updateRealTask(taskId, {
+			title: taskData.title,
+			description: taskData.description ?? null,
+			assigneeId: taskData.assigneeId ?? null,
+			dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
+			priority: taskData.priority.toUpperCase() as 'LOW' | 'MEDIUM' | 'HIGH',
+			checklist: taskData.checklist || null,
+		});
 			setIsEditingTask(false);
 			setEditingTask(null);
 		} catch (error) {
@@ -891,12 +949,12 @@ export default function BoardPage() {
 		tasks: column.tasks.filter((task) => {
 			if (
 				filters.priority.length > 0 &&
-				!filters.priority.includes(task.priority)
+				!filters.priority.includes(task.priority.toLowerCase())
 			) {
 				return false;
 			}
-			if (filters.dueDate && task.due_date) {
-				const taskDate = new Date(task.due_date).toDateString();
+			if (filters.dueDate && task.dueDate) {
+				const taskDate = new Date(task.dueDate).toDateString();
 				const filterDate = new Date(filters.dueDate ?? '').toDateString();
 				if (taskDate !== filterDate) {
 					return false;
@@ -1090,6 +1148,7 @@ export default function BoardPage() {
 								{columns.length > 0 && (
 									<TaskForm
 										columnId={columns[0].id}
+										boardId={board?.id}
 										onCreateTask={createTask}
 									/>
 								)}
@@ -1238,7 +1297,8 @@ export default function BoardPage() {
 					</DialogHeader>
 					{editingTask && (
 						<TaskForm
-							columnId={editingTask.column_id}
+							columnId={editingTask.columnId}
+							boardId={board?.id}
 							task={editingTask}
 							onUpdateTask={handleUpdateTask}
 							onClose={() => {

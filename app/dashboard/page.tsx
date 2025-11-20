@@ -17,9 +17,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useBoards } from '@/lib/hooks/useBoards';
-import { Board } from '@/lib/supabase/models';
-import { useUser } from '@clerk/nextjs';
+import { useBoards, BoardType } from '@/lib/hooks/useBoards';
+import { useSession } from 'next-auth/react';
 import {
 	Filter,
 	Grid3X3,
@@ -35,18 +34,31 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import React, { useState, useEffect } from 'react';
+import { useOrganization } from '@/lib/organization-context';
 
 export default function DashboardPage() {
-	const { user } = useUser();
-	const { createBoard, boards, loading, error, updateBoard, deleteBoard } =
-		useBoards();
+	const { data: session } = useSession();
+	const { selectedOrgId, setSelectedOrgId } = useOrganization();
+	const [organizations, setOrganizations] = useState<any[]>([]);
+	const [isAdmin, setIsAdmin] = useState(false);
+	const [orgLoading, setOrgLoading] = useState(true);
+
+	const {
+		createBoard,
+		boards,
+		loading,
+		error,
+		updateBoard,
+		deleteBoard,
+		refetch,
+	} = useBoards(selectedOrgId);
 	const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 	const [isFilterOpen, setIsFilterOpen] = useState(false);
 	const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
 	const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-	const [editingBoard, setEditingBoard] = useState<Board | null>(null);
-	const [deletingBoard, setDeletingBoard] = useState<Board | null>(null);
+	const [editingBoard, setEditingBoard] = useState<BoardType | null>(null);
+	const [deletingBoard, setDeletingBoard] = useState<BoardType | null>(null);
 	const [editTitle, setEditTitle] = useState('');
 	const [editColor, setEditColor] = useState('');
 	const [boardTitle, setBoardTitle] = useState('');
@@ -64,7 +76,52 @@ export default function DashboardPage() {
 		},
 	});
 
-	const filteredBoards = boards.filter((board: Board) => {
+	// Load organizations on mount
+	useEffect(() => {
+		if (session?.user) {
+			fetchOrganizations();
+		}
+	}, [session]);
+
+	async function fetchOrganizations() {
+		try {
+			setOrgLoading(true);
+			const response = await fetch('/api/organizations');
+			if (response.ok) {
+				const orgs = await response.json();
+				setOrganizations(orgs);
+
+				// Set first org as selected if none selected
+				if (!selectedOrgId && orgs.length > 0) {
+					setSelectedOrgId(orgs[0].organization.id);
+				}
+
+				// Check if user is admin of selected org
+				if (selectedOrgId) {
+					const selectedOrg = orgs.find(
+						(o: any) => o.organization.id === selectedOrgId,
+					);
+					setIsAdmin(selectedOrg?.role === 'ADMIN');
+				}
+			}
+		} catch (err) {
+			console.error('Failed to load organizations:', err);
+		} finally {
+			setOrgLoading(false);
+		}
+	}
+
+	useEffect(() => {
+		if (selectedOrgId) {
+			const selectedOrg = organizations.find(
+				(o: any) => o.organization.id === selectedOrgId,
+			);
+			setIsAdmin(selectedOrg?.role === 'ADMIN');
+			refetch();
+		}
+	}, [selectedOrgId, organizations]);
+
+	const filteredBoards = boards.filter((board: BoardType) => {
 		if (!board || !board.title) return false;
 
 		const matchesSearch = board.title
@@ -72,9 +129,9 @@ export default function DashboardPage() {
 			.includes(filters.search.toLowerCase());
 		const matchesDateRange =
 			!filters.dataRange.start ||
-			(new Date(board.created_at) >= new Date(filters.dataRange.start) &&
+			(new Date(board.createdAt) >= new Date(filters.dataRange.start) &&
 				(!filters.dataRange.end ||
-					new Date(board.created_at) <= new Date(filters.dataRange.end)));
+					new Date(board.createdAt) <= new Date(filters.dataRange.end)));
 		return matchesSearch && matchesDateRange;
 	});
 
@@ -89,7 +146,7 @@ export default function DashboardPage() {
 		setIsCreateDialogOpen(false);
 	};
 
-	const handleEditBoard = (board: Board, e: React.MouseEvent) => {
+	const handleEditBoard = (board: BoardType, e: React.MouseEvent) => {
 		e.preventDefault();
 		e.stopPropagation();
 		setEditingBoard(board);
@@ -99,7 +156,7 @@ export default function DashboardPage() {
 		setOpenDropdownId(null);
 	};
 
-	const handleDeleteBoard = (board: Board, e: React.MouseEvent) => {
+	const handleDeleteBoard = (board: BoardType, e: React.MouseEvent) => {
 		e.preventDefault();
 		e.stopPropagation();
 		setDeletingBoard(board);
@@ -160,7 +217,7 @@ export default function DashboardPage() {
 		});
 	}
 
-	if (loading) {
+	if (loading || orgLoading) {
 		return (
 			<div className="flex items-center justify-center h-screen gap-2">
 				<Loader2 className="animate-spin h-10 w-10 text-blue-600" />
@@ -181,6 +238,21 @@ export default function DashboardPage() {
 		);
 	}
 
+	if (!selectedOrgId && organizations.length === 0 && !orgLoading) {
+		return (
+			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+				<div className="text-center">
+					<p className="text-lg font-medium text-gray-900 mb-4">
+						No organizations found
+					</p>
+					<p className="text-sm text-gray-600">
+						Please create an organization to get started
+					</p>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="min-h-screen bg-gray-50">
 			<Navbar
@@ -188,14 +260,22 @@ export default function DashboardPage() {
 				onSearchChange={(value) =>
 					setFilters((prev) => ({ ...prev, search: value }))
 				}
-				onCreateBoardClick={() => setIsCreateDialogOpen(true)}
+				onCreateBoardClick={() => {
+					if (isAdmin) {
+						setIsCreateDialogOpen(true);
+					}
+				}}
+				organizations={organizations}
+				selectedOrgId={selectedOrgId}
+				onOrgChange={(orgId) => setSelectedOrgId(orgId)}
 			/>
 			<main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
 				<div className="mb-4 sm:mb-6">
 					<h1 className="text-xl sm:text-2xl font-bold text-gray-900">
 						Welcome back,{' '}
-						{user?.firstName ??
-							user?.emailAddresses[0].emailAddress.split('@')[0]}
+						{session?.user?.name ||
+							session?.user?.email?.split('@')[0] ||
+							'User'}
 						! 👋
 					</h1>
 					<p className="text-sm text-gray-600">
@@ -249,8 +329,8 @@ export default function DashboardPage() {
 									<p className="text-xl sm:text-2xl font-bold text-gray-900">
 										{
 											boards.filter((board) => {
-												if (!board || !board.updated_at) return false;
-												const updatedAt = new Date(board.updated_at);
+												if (!board || !board.updatedAt) return false;
+												const updatedAt = new Date(board.updatedAt);
 												const oneWeekAgo = new Date();
 												oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 												return updatedAt > oneWeekAgo;
@@ -334,6 +414,12 @@ export default function DashboardPage() {
 												<div className="flex items-center justify-between">
 													<div className={`w-4 h-4 ${board.color} rounded`} />
 													<div className="flex items-center gap-2">
+														{new Date(board.createdAt) >
+														new Date(Date.now() - 1000 * 60 * 60 * 24 * 7) ? (
+															<Badge className="text-xs" variant="secondary">
+																New
+															</Badge>
+														) : null}
 														<div className="relative">
 															<Button
 																variant="ghost"
@@ -382,11 +468,11 @@ export default function DashboardPage() {
 												<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500 space-y-1 sm:space-y-0">
 													<span>
 														Created{' '}
-														{new Date(board.created_at).toLocaleDateString()}
+														{new Date(board.createdAt).toLocaleDateString()}
 													</span>
 													<span>
 														Updated{' '}
-														{new Date(board.updated_at).toLocaleDateString()}
+														{new Date(board.updatedAt).toLocaleDateString()}
 													</span>
 												</div>
 											</CardContent>
@@ -394,18 +480,20 @@ export default function DashboardPage() {
 									</Link>
 								</div>
 							))}
-							<Card
-								onClick={() => {
-									setIsCreateDialogOpen(true);
-								}}
-								className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
-								<CardContent className="p-3 sm:p-6 flex flex-col items-center justify-center h-full">
-									<Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
-									<p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">
-										Create new board
-									</p>
-								</CardContent>
-							</Card>
+							{isAdmin && (
+								<Card
+									onClick={() => {
+										setIsCreateDialogOpen(true);
+									}}
+									className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
+									<CardContent className="p-3 sm:p-6 flex flex-col items-center justify-center h-full">
+										<Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
+										<p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">
+											Create new board
+										</p>
+									</CardContent>
+								</Card>
+							)}
 						</div>
 					) : (
 						<div>
@@ -418,7 +506,7 @@ export default function DashboardPage() {
 													<div className="flex items-center justify-between">
 														<div className={`w-4 h-4 ${board.color} rounded`} />
 														<div className="flex items-center gap-2">
-															{new Date(board.created_at) <
+															{new Date(board.createdAt) >
 															new Date(Date.now() - 1000 * 60 * 60 * 24 * 7) ? (
 																<Badge className="text-xs" variant="secondary">
 																	New
@@ -474,11 +562,11 @@ export default function DashboardPage() {
 													<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500 space-y-1 sm:space-y-0">
 														<span>
 															Created{' '}
-															{new Date(board.created_at).toLocaleDateString()}
+															{new Date(board.createdAt).toLocaleDateString()}
 														</span>
 														<span>
 															Updated{' '}
-															{new Date(board.updated_at).toLocaleDateString()}
+															{new Date(board.updatedAt).toLocaleDateString()}
 														</span>
 													</div>
 												</CardContent>
@@ -487,16 +575,20 @@ export default function DashboardPage() {
 									</div>
 								</div>
 							))}
-							<Card onClick={() => {
-									setIsCreateDialogOpen(true);
-								}} className="mt-4 border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
-								<CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full min-h-[200px]">
-									<Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
-									<p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">
-										Create new board
-									</p>
-								</CardContent>
-							</Card>
+							{isAdmin && (
+								<Card
+									onClick={() => {
+										setIsCreateDialogOpen(true);
+									}}
+									className="mt-4 border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
+									<CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full min-h-[200px]">
+										<Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
+										<p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">
+											Create new board
+										</p>
+									</CardContent>
+								</Card>
+							)}
 						</div>
 					)}
 				</div>
