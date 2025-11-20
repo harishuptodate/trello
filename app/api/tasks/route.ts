@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-utils';
-import { taskService, columnService } from '@/lib/services';
+import { taskService } from '@/lib/services';
 import { hasOrgAccess } from '@/lib/auth-rules';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
@@ -23,25 +23,17 @@ export async function POST(request: NextRequest) {
 		const data = createTaskSchema.parse(body);
 
 		// Get column to find board
-		const column = await columnService.getColumns(data.columnId);
-		if (!column || column.length === 0) {
-			return NextResponse.json({ error: 'Column not found' }, { status: 404 });
-		}
-
-		const firstColumn = await prisma.column.findUnique({
+		const column = await prisma.column.findUnique({
 			where: { id: data.columnId },
 			include: { board: true },
 		});
 
-		if (!firstColumn) {
+		if (!column) {
 			return NextResponse.json({ error: 'Column not found' }, { status: 404 });
 		}
 
 		// Verify user has access to the organization
-		const hasAccess = await hasOrgAccess(
-			user.id,
-			firstColumn.board.organizationId,
-		);
+		const hasAccess = await hasOrgAccess(user.id, column.board.organizationId);
 		if (!hasAccess) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
@@ -50,7 +42,7 @@ export async function POST(request: NextRequest) {
 		if (data.assigneeId) {
 			const assigneeMember = await prisma.organizationMember.findFirst({
 				where: {
-					organizationId: firstColumn.board.organizationId,
+					organizationId: column.board.organizationId,
 					userId: data.assigneeId,
 				},
 			});

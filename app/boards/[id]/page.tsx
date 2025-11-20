@@ -28,6 +28,7 @@ import {
 	X,
 	Trash2,
 	Pencil,
+	Loader2,
 } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
@@ -94,7 +95,8 @@ type TaskFormProps = {
 	onUpdateTask?: (taskId: string, taskData: TaskData) => Promise<void>;
 	onClose: () => void;
 };
-
+// dialog is not closing after creating the task fix it, but when updating the task, the dialog is closing.
+// fix is : 
 function TaskForm({
 	columnId,
 	boardId,
@@ -107,6 +109,7 @@ function TaskForm({
 		[],
 	);
 	const [loadingMembers, setLoadingMembers] = useState(false);
+	const [submitting, setSubmitting] = useState(false);
 
 	useEffect(() => {
 		if (boardId || columnId) {
@@ -178,8 +181,9 @@ function TaskForm({
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!title.trim()) return;
+		if (!title.trim() || submitting) return;
 
+		setSubmitting(true);
 		// Filter out empty checklist items
 		const validChecklist = checklist.filter(
 			(item) => item.item.trim().length > 0,
@@ -218,6 +222,8 @@ function TaskForm({
 			}
 		} catch (error) {
 			console.error('Error saving task:', error);
+		} finally {
+			setSubmitting(false);
 		}
 	};
 
@@ -262,52 +268,54 @@ function TaskForm({
 					rows={3}
 				/>
 			</div>
-			<div className="space-y-2">
-				<Label>Assignee</Label>
-				<Select value={assigneeId} onValueChange={setAssigneeId}>
-					<SelectTrigger>
-						<SelectValue placeholder="Select assignee..." />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="none">None</SelectItem>
-						{orgMembers.length > 0 &&
-							orgMembers.map((member) => {
-								return (
-									<SelectItem key={member.user.id} value={member.user.id}>
-										{member.user.name || member.user.email || 'No assignee'}
-									</SelectItem>
-								);
-							})}
-					</SelectContent>
-				</Select>
-			</div>
-			<div className="space-y-2">
-				<Label>Priority</Label>
-				<Select
-					value={priority}
-					onValueChange={(value: 'low' | 'medium' | 'high') =>
-						setPriority(value)
-					}>
-					<SelectTrigger>
-						<SelectValue placeholder="Select task priority..." />
-					</SelectTrigger>
-					<SelectContent>
-						{['low', 'medium', 'high'].map((p) => (
-							<SelectItem key={p} value={p}>
-								{p.charAt(0).toUpperCase() + p.slice(1)}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-			</div>
-			<div className="space-y-2">
-				<Label>Due Date</Label>
-				<Input
-					type="date"
-					id="dueDate"
-					value={dueDate}
-					onChange={(e) => setDueDate(e.target.value)}
-				/>
+			<div className="flex items-center justify-between gap-2">
+				<div className="space-y-2">
+					<Label className="ml-3.5">Assignee</Label>
+					<Select value={assigneeId} onValueChange={setAssigneeId}>
+						<SelectTrigger>
+							<SelectValue placeholder="Select assignee..." />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="none">None</SelectItem>
+							{orgMembers.length > 0 &&
+								orgMembers.map((member) => {
+									return (
+										<SelectItem key={member.user.id} value={member.user.id}>
+											{member.user.name || member.user.email || 'No assignee'}
+										</SelectItem>
+									);
+								})}
+						</SelectContent>
+					</Select>
+				</div>
+				<div className="space-y-2">
+					<Label className="ml-10.5">Due Date</Label>
+					<Input
+						type="date"
+						id="dueDate"
+						value={dueDate}
+						onChange={(e) => setDueDate(e.target.value)}
+					/>
+				</div>
+				<div className="space-y-2">
+					<Label className="ml-3.5">Priority</Label>
+					<Select
+						value={priority}
+						onValueChange={(value: 'low' | 'medium' | 'high') =>
+							setPriority(value)
+						}>
+						<SelectTrigger>
+							<SelectValue placeholder="Select task priority..." />
+						</SelectTrigger>
+						<SelectContent>
+							{['low', 'medium', 'high'].map((p) => (
+								<SelectItem key={p} value={p}>
+									{p.charAt(0).toUpperCase() + p.slice(1)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</div>
 			</div>
 
 			{/* Checklist Section */}
@@ -365,6 +373,7 @@ function TaskForm({
 									/>
 									<Input
 										value={item.item}
+										autoFocus={index === checklist.length - 1} //
 										onChange={(e) =>
 											updateChecklistItem(index, { item: e.target.value })
 										}
@@ -389,8 +398,17 @@ function TaskForm({
 			</div>
 
 			<div className="flex justify-end space-x-2 pt-4">
-				<Button type="submit" disabled={!title.trim()}>
-					{isEditMode ? 'Update Task' : 'Create Task'}
+				<Button type="submit" disabled={!title.trim() || submitting}>
+					{submitting ? (
+						<>
+							<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+							{isEditMode ? 'Updating...' : 'Creating...'}
+						</>
+					) : isEditMode ? (
+						'Update Task'
+					) : (
+						'Create Task'
+					)}
 				</Button>
 			</div>
 		</form>
@@ -712,10 +730,13 @@ export default function BoardPage() {
 		moveTask,
 		updateRealColumn,
 		updateRealTask,
+		loading,
+		error,
 	} = useBoard(id);
 	const [isEditngTitle, setIsEditingTitle] = useState(false);
 	const [newTitle, setNewTitle] = useState('');
 	const [newColor, setNewColor] = useState('');
+	const [updatingBoardTitle, setUpdatingBoardTitle] = useState(false);
 
 	const [activeTask, setActiveTask] = useState<
 		| (Task & {
@@ -747,6 +768,8 @@ export default function BoardPage() {
 
 	const [newColumnTitle, setNewColumnTitle] = useState('');
 	const [editingColumnTitle, setEditingColumnTitle] = useState('');
+	const [creatingColumn, setCreatingColumn] = useState(false);
+	const [updatingColumn, setUpdatingColumn] = useState(false);
 
 	const [editingColumn, setEditingColumn] = useState<ColumnWithTasks | null>(
 		null,
@@ -779,14 +802,19 @@ export default function BoardPage() {
 	}
 	async function handleUpdateBoard(e: React.FormEvent) {
 		e.preventDefault();
-		if (!newTitle.trim() || !board) return;
+		if (!newTitle.trim() || !board || updatingBoardTitle) return;
+		setUpdatingBoardTitle(true);
 		try {
 			await updateBoard(board.id, {
 				title: newTitle.trim(),
 				color: newColor || board.color,
 			});
 			setIsEditingTitle(false);
-		} catch (error) {}
+		} catch (error) {
+			console.error('Error updating board:', error);
+		} finally {
+			setUpdatingBoardTitle(false);
+		}
 	}
 	async function createTask(columnId: string, taskData: TaskData) {
 		await createRealTask(columnId, taskData);
@@ -817,11 +845,14 @@ export default function BoardPage() {
 		},
 	) {
 		setEditingTask(task);
-		setIsEditingTask(true);
+		// setIsEditingTask(true);
 	}
 
+	const [updatingTask, setUpdatingTask] = useState(false);
+
 	async function handleUpdateTask(taskId: string, taskData: TaskData) {
-		if (!updateRealTask) return;
+		if (!updateRealTask || updatingTask) return;
+		setUpdatingTask(true);
 		try {
 			await updateRealTask(taskId, {
 				title: taskData.title,
@@ -835,6 +866,8 @@ export default function BoardPage() {
 			setEditingTask(null);
 		} catch (error) {
 			console.error('Error updating task:', error);
+		} finally {
+			setUpdatingTask(false);
 		}
 	}
 
@@ -944,19 +977,33 @@ export default function BoardPage() {
 
 	async function handleCreateColumn(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
-		if (!newColumnTitle.trim()) return;
-		await createRealColumn(newColumnTitle.trim());
-		setIsCreatingColumn(false);
-		setNewColumnTitle('');
+		if (!newColumnTitle.trim() || creatingColumn) return;
+		setCreatingColumn(true);
+		try {
+			await createRealColumn(newColumnTitle.trim());
+			setIsCreatingColumn(false);
+			setNewColumnTitle('');
+		} catch (error) {
+			console.error('Error creating column:', error);
+		} finally {
+			setCreatingColumn(false);
+		}
 	}
 	// handle update column
 	async function handleUpdateColumn(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
-		if (!editingColumnTitle.trim() || !editingColumn) return;
-		await updateRealColumn(editingColumn?.id, editingColumnTitle.trim());
-		setIsEditingColumn(false);
-		setEditingColumnTitle('');
-		setEditingColumn(null);
+		if (!editingColumnTitle.trim() || !editingColumn || updatingColumn) return;
+		setUpdatingColumn(true);
+		try {
+			await updateRealColumn(editingColumn?.id, editingColumnTitle.trim());
+			setIsEditingColumn(false);
+			setEditingColumnTitle('');
+			setEditingColumn(null);
+		} catch (error) {
+			console.error('Error updating column:', error);
+		} finally {
+			setUpdatingColumn(false);
+		}
 	}
 	// handle edit column
 	function handleEditColumn(column: ColumnWithTasks) {
@@ -1077,6 +1124,27 @@ export default function BoardPage() {
 		}),
 	}));
 
+	if (loading) {
+		return (
+			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+				<div className="text-center">
+					<Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-4" />
+					<p className="text-lg font-medium text-gray-900">Loading board...</p>
+				</div>
+			</div>
+		);
+	}
+
+	if (error) {
+		return (
+			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+				<div className="text-center">
+					<p className="text-lg font-medium text-red-600">{error}</p>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<>
 			<div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
@@ -1151,8 +1219,16 @@ export default function BoardPage() {
 								</Button>
 								<Button
 									className="focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-primary"
-									type="submit">
-									Save Changes
+									type="submit"
+									disabled={updatingBoardTitle}>
+									{updatingBoardTitle ? (
+										<>
+											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+											Updating...
+										</>
+									) : (
+										'Save Changes'
+									)}
 								</Button>
 							</div>
 						</form>
@@ -1355,7 +1431,16 @@ export default function BoardPage() {
 								onClick={() => setIsCreatingColumn(false)}>
 								Cancel
 							</Button>
-							<Button type="submit">Create Column</Button>
+							<Button type="submit" disabled={creatingColumn}>
+								{creatingColumn ? (
+									<>
+										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										Creating...
+									</>
+								) : (
+									'Create Column'
+								)}
+							</Button>
 						</div>
 					</form>
 				</DialogContent>
@@ -1392,7 +1477,16 @@ export default function BoardPage() {
 								}}>
 								Cancel
 							</Button>
-							<Button type="submit">Update Column</Button>
+							<Button type="submit" disabled={updatingColumn}>
+								{updatingColumn ? (
+									<>
+										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										Updating...
+									</>
+								) : (
+									'Update Column'
+								)}
+							</Button>
 						</div>
 					</form>
 				</DialogContent>

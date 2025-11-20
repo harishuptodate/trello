@@ -247,7 +247,7 @@ export function useBoard(boardId: string) {
 				if (taskToMove) {
 					const targetColumn = newColumns.find((col) => col.id === newColumnId);
 					if (targetColumn) {
-						targetColumn.tasks.splice(newSortOrder, 0, taskToMove);
+						targetColumn.tasks.splice(newSortOrder, 0, taskToMove as unknown as Task & { assignee: { id: string; name: string | null; email: string; image: string | null } | null });
 					}
 				}
 

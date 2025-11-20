@@ -35,6 +35,7 @@ import {
 import Link from 'next/link';
 import React, { useState, useEffect } from 'react';
 import { useOrganization } from '@/lib/organization-context';
+import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
 	const { data: session } = useSession();
@@ -56,6 +57,7 @@ export default function DashboardPage() {
 		deleteBoard,
 		refetch,
 	} = useBoards(selectedOrgId);
+	const router = useRouter();
 	const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 	const [isFilterOpen, setIsFilterOpen] = useState(false);
 	const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
@@ -68,6 +70,9 @@ export default function DashboardPage() {
 	const [boardTitle, setBoardTitle] = useState('');
 	const [createDefaultColumns, setCreateDefaultColumns] = useState(true);
 	const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+	const [creatingBoard, setCreatingBoard] = useState(false);
+	const [updatingBoard, setUpdatingBoard] = useState(false);
+	const [deletingBoardId, setDeletingBoardId] = useState<string | null>(null);
 	const [filters, setFilters] = useState({
 		search: '',
 		dataRange: {
@@ -102,13 +107,21 @@ export default function DashboardPage() {
 
 	const handleCreateBoard = async (e: React.FormEvent) => {
 		e.preventDefault();
-		await createBoard({
-			title: boardTitle,
-			createDefaultColumns,
-		});
-		setBoardTitle('');
-		setCreateDefaultColumns(true);
-		setIsCreateDialogOpen(false);
+		if (creatingBoard) return;
+		setCreatingBoard(true);
+		try {
+			await createBoard({
+				title: boardTitle,
+				createDefaultColumns,
+			});
+			setBoardTitle('');
+			setCreateDefaultColumns(true);
+			setIsCreateDialogOpen(false);
+		} catch (error) {
+			console.error('Error creating board:', error);
+		} finally {
+			setCreatingBoard(false);
+		}
 	};
 
 	const handleEditBoard = (board: BoardType, e: React.MouseEvent) => {
@@ -131,7 +144,8 @@ export default function DashboardPage() {
 
 	const handleUpdateBoard = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!editingBoard || !editTitle.trim()) return;
+		if (!editingBoard || !editTitle.trim() || updatingBoard) return;
+		setUpdatingBoard(true);
 		try {
 			await updateBoard(editingBoard.id, {
 				title: editTitle.trim(),
@@ -143,17 +157,22 @@ export default function DashboardPage() {
 			setEditColor('');
 		} catch (error) {
 			console.error('Error updating board:', error);
+		} finally {
+			setUpdatingBoard(false);
 		}
 	};
 
 	const handleConfirmDelete = async () => {
-		if (!deletingBoard) return;
+		if (!deletingBoard || deletingBoardId) return;
+		setDeletingBoardId(deletingBoard.id);
 		try {
 			await deleteBoard(deletingBoard.id);
 			setIsDeleteDialogOpen(false);
 			setDeletingBoard(null);
 		} catch (error) {
 			console.error('Error deleting board:', error);
+		} finally {
+			setDeletingBoardId(null);
 		}
 	};
 
@@ -732,8 +751,16 @@ export default function DashboardPage() {
 							</Button>
 							<Button
 								className="focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-primary"
-								type="submit">
-								Save Changes
+								type="submit"
+								disabled={updatingBoard}>
+								{updatingBoard ? (
+									<>
+										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										Updating...
+									</>
+								) : (
+									'Save Changes'
+								)}
 							</Button>
 						</div>
 					</form>
@@ -762,8 +789,16 @@ export default function DashboardPage() {
 						<Button
 							type="button"
 							variant="destructive"
-							onClick={handleConfirmDelete}>
-							Delete
+							onClick={handleConfirmDelete}
+							disabled={!!deletingBoardId}>
+							{deletingBoardId ? (
+								<>
+									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+									Deleting...
+								</>
+							) : (
+								'Delete'
+							)}
 						</Button>
 					</div>
 				</DialogContent>
@@ -817,8 +852,16 @@ export default function DashboardPage() {
 							</Button>
 							<Button
 								className="focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-primary"
-								type="submit">
-								Create Board
+								type="submit"
+								disabled={creatingBoard}>
+								{creatingBoard ? (
+									<>
+										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										Creating...
+									</>
+								) : (
+									'Create Board'
+								)}
 							</Button>
 						</div>
 					</form>

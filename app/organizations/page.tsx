@@ -21,7 +21,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import Navbar from '@/components/navbar';
-import { Plus, Building2, Users, LayoutGrid, Crown } from 'lucide-react';
+import {
+	Plus,
+	Building2,
+	Users,
+	LayoutGrid,
+	Crown,
+	Loader2,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useOrganization } from '@/lib/organization-context';
 
@@ -35,6 +42,7 @@ export default function OrganizationsPage() {
 	const [orgName, setOrgName] = useState('');
 	const [orgSlug, setOrgSlug] = useState('');
 	const [error, setError] = useState('');
+	const [creatingOrg, setCreatingOrg] = useState(false);
 
 	useEffect(() => {
 		if (session?.user) {
@@ -61,8 +69,10 @@ export default function OrganizationsPage() {
 		e.preventDefault();
 		setError('');
 
-		if (!orgName.trim() || !orgSlug.trim()) {
-			setError('Name and slug are required');
+		if (!orgName.trim() || !orgSlug.trim() || creatingOrg) {
+			if (!orgName.trim() || !orgSlug.trim()) {
+				setError('Name and slug are required');
+			}
 			return;
 		}
 
@@ -74,6 +84,7 @@ export default function OrganizationsPage() {
 			return;
 		}
 
+		setCreatingOrg(true);
 		try {
 			const response = await fetch('/api/organizations', {
 				method: 'POST',
@@ -98,6 +109,8 @@ export default function OrganizationsPage() {
 			setOrgSlug('');
 		} catch (err) {
 			setError('An error occurred. Please try again.');
+		} finally {
+			setCreatingOrg(false);
 		}
 	}
 
@@ -110,7 +123,10 @@ export default function OrganizationsPage() {
 		return (
 			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
 				<div className="text-center">
-					<p className="text-lg font-medium text-gray-900">Loading...</p>
+					<Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-4" />
+					<p className="text-lg font-medium text-gray-900">
+						Loading organizations...
+					</p>
 				</div>
 			</div>
 		);
@@ -157,50 +173,52 @@ export default function OrganizationsPage() {
 							{organizations.map((orgMember) => (
 								<Card
 									key={orgMember.id}
-									className="hover:shadow-lg transition-shadow cursor-pointer"
-									onClick={() =>
-										handleSelectOrganization(orgMember.organization.id)
-									}>
-									<CardHeader>
-										<div className="flex items-start justify-between">
-											<div className="flex items-center space-x-2">
-												<Building2 className="h-5 w-5 text-blue-600" />
-												<CardTitle className="text-lg">
-													{orgMember.organization.name}
-												</CardTitle>
-											</div>
-											{orgMember.role === 'ADMIN' && (
-												<Badge
-													variant="secondary"
-													className="flex items-center gap-1">
-													<Crown className="h-3 w-3" />
-													Admin
-												</Badge>
-											)}
-										</div>
-										<CardDescription>
-											{orgMember.organization.slug}
-										</CardDescription>
-									</CardHeader>
-									<CardContent>
-										<div className="flex items-center justify-between text-sm text-gray-600">
-											<div className="flex items-center gap-4">
-												<div className="flex items-center gap-1">
-													<Users className="h-4 w-4" />
-													<span>
-														{orgMember.organization._count?.members || 0}{' '}
-														members
-													</span>
+									className="hover:shadow-lg transition-shadow">
+									<Link href={`/organizations/${orgMember.organization.id}`}>
+										<div className="cursor-pointer">
+											<CardHeader>
+												<div className="flex items-start justify-between">
+													<div className="flex items-center space-x-2">
+														<Building2 className="h-5 w-5 text-blue-600" />
+														<CardTitle className="text-lg">
+															{orgMember.organization.name}
+														</CardTitle>
+													</div>
+													{orgMember.role === 'ADMIN' && (
+														<Badge
+															variant="secondary"
+															className="flex items-center gap-1">
+															<Crown className="h-3 w-3" />
+															Admin
+														</Badge>
+													)}
 												</div>
-												<div className="flex items-center gap-1">
-													<LayoutGrid className="h-4 w-4" />
-													<span>
-														{orgMember.organization._count?.boards || 0} boards
-													</span>
+												<CardDescription>
+													{orgMember.organization.slug}
+												</CardDescription>
+											</CardHeader>
+											<CardContent>
+												<div className="flex items-center justify-between text-sm text-gray-600">
+													<div className="flex items-center gap-4">
+														<div className="flex items-center gap-1">
+															<Users className="h-4 w-4" />
+															<span>
+																{orgMember.organization._count?.members || 0}{' '}
+																members
+															</span>
+														</div>
+														<div className="flex items-center gap-1">
+															<LayoutGrid className="h-4 w-4" />
+															<span>
+																{orgMember.organization._count?.boards || 0}{' '}
+																boards
+															</span>
+														</div>
+													</div>
 												</div>
-											</div>
+											</CardContent>
 										</div>
-									</CardContent>
+									</Link>
 								</Card>
 							))}
 						</div>
@@ -263,7 +281,16 @@ export default function OrganizationsPage() {
 								}}>
 								Cancel
 							</Button>
-							<Button type="submit">Create</Button>
+							<Button type="submit" disabled={creatingOrg}>
+								{creatingOrg ? (
+									<>
+										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										Creating...
+									</>
+								) : (
+									'Create'
+								)}
+							</Button>
 						</div>
 					</form>
 				</DialogContent>

@@ -1,9 +1,15 @@
+'use client';
+
 import Navbar from '@/components/navbar';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 
 export default function Home() {
+	const { data: session } = useSession();
+	const isLoggedIn = !!session;
+
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-blue-500 via-white to-purple-500">
 			<Navbar />
@@ -17,17 +23,31 @@ export default function Home() {
 						done.
 					</p>
 					<div className="flex flex-col sm:flex-row gap-4 justify-center">
-						<Link href="/auth/signup">
-							<Button size="lg" className="w-full sm:w-auto">
-								Get Started
-								<ArrowRight className="ml-2 h-4 w-4" />
-							</Button>
-						</Link>
-						<Link href="/auth/signin">
-							<Button size="lg" variant="outline" className="w-full sm:w-auto">
-								Sign In
-							</Button>
-						</Link>
+						{isLoggedIn ? (
+							<Link href="/dashboard">
+								<Button size="lg" className="w-full sm:w-auto">
+									Go to Dashboard
+									<ArrowRight className="ml-2 h-4 w-4" />
+								</Button>
+							</Link>
+						) : (
+							<>
+								<Link href="/auth/signup">
+									<Button size="lg" className="w-full sm:w-auto">
+										Get Started
+										<ArrowRight className="ml-2 h-4 w-4" />
+									</Button>
+								</Link>
+								<Link href="/auth/signin">
+									<Button
+										size="lg"
+										variant="outline"
+										className="w-full sm:w-auto">
+										Sign In
+									</Button>
+								</Link>
+							</>
+						)}
 					</div>
 				</div>
 			</main>

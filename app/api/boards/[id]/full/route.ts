@@ -5,11 +5,12 @@ import { hasOrgAccess } from '@/lib/auth-rules';
 
 export async function GET(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-		const board = await boardDataService.getBoardWithColumns(params.id);
+		const { id } = await params;
+		const board = await boardDataService.getBoardWithColumns(id);
 
 		const hasAccess = await hasOrgAccess(user.id, board.organizationId);
 		if (!hasAccess) {

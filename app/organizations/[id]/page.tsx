@@ -29,6 +29,9 @@ import {
 	UserPlus,
 	Trash2,
 	ArrowLeft,
+	Search,
+	Loader2,
+	Check,
 } from 'lucide-react';
 import Link from 'next/link';
 import { isOrgAdmin } from '@/lib/auth-rules';
@@ -44,46 +47,55 @@ export default function OrganizationPage() {
 	const [loading, setLoading] = useState(true);
 	const [isAddMemberDialogOpen, setIsAddMemberDialogOpen] = useState(false);
 	const [memberEmail, setMemberEmail] = useState('');
+	const [searchQuery, setSearchQuery] = useState('');
+	const [searchResults, setSearchResults] = useState<any[]>([]);
+	const [searching, setSearching] = useState(false);
 	const [error, setError] = useState('');
 	const [isAdmin, setIsAdmin] = useState(false);
+	const [addingMember, setAddingMember] = useState(false);
+	const [removingMember, setRemovingMember] = useState<string | null>(null);
 
 	useEffect(() => {
 		if (session?.user && orgId) {
 			loadOrganization();
-			checkAdminStatus();
 		}
 	}, [session, orgId]);
+
+	useEffect(() => {
+		if (organization && session?.user?.id) {
+			const userMember = members.find((m: any) => m.userId === session.user.id);
+			setIsAdmin(userMember?.role === 'ADMIN' || false);
+		}
+	}, [organization, members, session]);
 
 	async function loadOrganization() {
 		try {
 			setLoading(true);
-			const orgResponse = await fetch(`/api/organizations/${orgId}`);
+			const [orgResponse, membersResponse] = await Promise.all([
+				fetch(`/api/organizations/${orgId}`),
+				fetch(`/api/organizations/${orgId}/members`),
+			]);
 
 			if (orgResponse.ok) {
 				const org = await orgResponse.json();
 				setOrganization(org);
-				setMembers(org.members || []);
+			}
+
+			if (membersResponse.ok) {
+				const membersData = await membersResponse.json();
+				setMembers(membersData);
+				// Update admin status
+				if (session?.user?.id) {
+					const userMember = membersData.find(
+						(m: any) => m.userId === session.user.id,
+					);
+					setIsAdmin(userMember?.role === 'ADMIN' || false);
+				}
 			}
 		} catch (err) {
 			console.error('Failed to load organization:', err);
 		} finally {
 			setLoading(false);
-		}
-	}
-
-	async function checkAdminStatus() {
-		if (!session?.user?.id) return;
-		try {
-			const response = await fetch(`/api/organizations/${orgId}`);
-			if (response.ok) {
-				const org = await response.json();
-				const userMember = org.members.find(
-					(m: any) => m.userId === session.user.id,
-				);
-				setIsAdmin(userMember?.role === 'ADMIN');
-			}
-		} catch (err) {
-			console.error('Failed to check admin status:', err);
 		}
 	}
 
@@ -96,20 +108,63 @@ export default function OrganizationPage() {
 		}
 	}, [organization, session]);
 
-	async function handleAddMember(e: React.FormEvent) {
-		e.preventDefault();
-		setError('');
-
-		if (!memberEmail.trim()) {
-			setError('Email is required');
+	async function searchUsers(query: string) {
+		if (query.length < 2) {
+			setSearchResults([]);
 			return;
 		}
 
+		setSearching(true);
 		try {
+			const response = await fetch(
+				`/api/users/search?q=${encodeURIComponent(query)}`,
+			);
+			if (response.ok) {
+				const data = await response.json();
+				// Filter out users who are already members
+				const memberUserIds = new Set(members.map((m: any) => m.userId));
+				setSearchResults(
+					data.users.filter((user: any) => !memberUserIds.has(user.id)),
+				);
+			}
+		} catch (err) {
+			console.error('Failed to search users:', err);
+		} finally {
+			setSearching(false);
+		}
+	}
+
+	useEffect(() => {
+		const timeoutId = setTimeout(() => {
+			if (searchQuery) {
+				searchUsers(searchQuery);
+			} else {
+				setSearchResults([]);
+			}
+		}, 300);
+
+		return () => clearTimeout(timeoutId);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [searchQuery]);
+
+	async function handleAddMember(
+		userId: string,
+		role: 'ADMIN' | 'MEMBER' = 'MEMBER',
+	) {
+		setError('');
+		setAddingMember(true);
+
+		try {
+			const user = searchResults.find((u) => u.id === userId);
+			if (!user) {
+				setError('User not found');
+				return;
+			}
+
 			const response = await fetch(`/api/organizations/${orgId}/members`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ email: memberEmail.trim() }),
+				body: JSON.stringify({ email: user.email, role }),
 			});
 
 			const data = await response.json();
@@ -120,16 +175,19 @@ export default function OrganizationPage() {
 			}
 
 			await loadOrganization();
-			setIsAddMemberDialogOpen(false);
-			setMemberEmail('');
+			setSearchQuery('');
+			setSearchResults([]);
 		} catch (err) {
 			setError('An error occurred. Please try again.');
+		} finally {
+			setAddingMember(false);
 		}
 	}
 
 	async function handleRemoveMember(userId: string) {
 		if (!confirm('Are you sure you want to remove this member?')) return;
 
+		setRemovingMember(userId);
 		try {
 			const response = await fetch(
 				`/api/organizations/${orgId}/members?userId=${userId}`,
@@ -147,6 +205,8 @@ export default function OrganizationPage() {
 			await loadOrganization();
 		} catch (err) {
 			alert('An error occurred. Please try again.');
+		} finally {
+			setRemovingMember(null);
 		}
 	}
 
@@ -154,7 +214,10 @@ export default function OrganizationPage() {
 		return (
 			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
 				<div className="text-center">
-					<p className="text-lg font-medium text-gray-900">Loading...</p>
+					<Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-4" />
+					<p className="text-lg font-medium text-gray-900">
+						Loading organization...
+					</p>
 				</div>
 			</div>
 		);
@@ -217,7 +280,7 @@ export default function OrganizationPage() {
 								</div>
 								<div className="flex items-center gap-2">
 									<LayoutGrid className="h-4 w-4" />
-									<span>{organization.boards?.length || 0} boards</span>
+									<span>{organization._count?.boards || 0} boards</span>
 								</div>
 							</div>
 						</CardContent>
@@ -234,94 +297,181 @@ export default function OrganizationPage() {
 					</div>
 
 					<div className="space-y-2">
-						{members.map((member) => (
-							<Card key={member.id}>
-								<CardContent className="p-4">
-									<div className="flex items-center justify-between">
-										<div className="flex items-center space-x-3">
-											<div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-												<span className="text-blue-600 font-medium">
-													{member.user.name?.[0] ||
-														member.user.email[0].toUpperCase()}
-												</span>
-											</div>
-											<div>
-												<p className="font-medium text-gray-900">
-													{member.user.name || 'No name'}
-												</p>
-												<p className="text-sm text-gray-600">
-													{member.user.email}
-												</p>
-											</div>
-										</div>
-										<div className="flex items-center gap-3">
-											{member.role === 'ADMIN' && (
-												<Badge
-													variant="secondary"
-													className="flex items-center gap-1">
-													<Crown className="h-3 w-3" />
-													Admin
-												</Badge>
-											)}
-											{isAdmin && member.userId !== session?.user?.id && (
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => handleRemoveMember(member.userId)}
-													className="text-red-600 hover:text-red-700">
-													<Trash2 className="h-4 w-4" />
-												</Button>
-											)}
-										</div>
-									</div>
+						{members.length === 0 ? (
+							<Card>
+								<CardContent className="p-8 text-center">
+									<Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+									<p className="text-sm text-gray-600">No members yet</p>
 								</CardContent>
 							</Card>
-						))}
+						) : (
+							members.map((member) => (
+								<Card key={member.id}>
+									<CardContent className="p-4">
+										<div className="flex items-center justify-between">
+											<div className="flex items-center space-x-3">
+												<div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+													<span className="text-blue-600 font-medium">
+														{member.user.name?.[0] ||
+															member.user.email[0].toUpperCase()}
+													</span>
+												</div>
+												<div>
+													<p className="font-medium text-gray-900">
+														{member.user.name || 'No name'}
+													</p>
+													<p className="text-sm text-gray-600">
+														{member.user.email}
+													</p>
+												</div>
+											</div>
+											<div className="flex items-center gap-3">
+												{member.role === 'ADMIN' && (
+													<Badge
+														variant="secondary"
+														className="flex items-center gap-1">
+														<Crown className="h-3 w-3" />
+														Admin
+													</Badge>
+												)}
+												{isAdmin && member.userId !== session?.user?.id && (
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => handleRemoveMember(member.userId)}
+														disabled={removingMember === member.userId}
+														className="text-red-600 hover:text-red-700">
+														{removingMember === member.userId ? (
+															<Loader2 className="h-4 w-4 animate-spin" />
+														) : (
+															<Trash2 className="h-4 w-4" />
+														)}
+													</Button>
+												)}
+											</div>
+										</div>
+									</CardContent>
+								</Card>
+							))
+						)}
 					</div>
 				</div>
 			</main>
 
 			<Dialog
 				open={isAddMemberDialogOpen}
-				onOpenChange={setIsAddMemberDialogOpen}>
-				<DialogContent>
+				onOpenChange={(open) => {
+					setIsAddMemberDialogOpen(open);
+					if (!open) {
+						setSearchQuery('');
+						setSearchResults([]);
+						setError('');
+					}
+				}}>
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>Add Member</DialogTitle>
 					</DialogHeader>
-					<form onSubmit={handleAddMember} className="space-y-4">
+					<div className="space-y-4">
 						{error && (
 							<div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
 								{error}
 							</div>
 						)}
 						<div className="space-y-2">
-							<Label htmlFor="memberEmail">Email Address</Label>
-							<Input
-								id="memberEmail"
-								type="email"
-								value={memberEmail}
-								onChange={(e) => setMemberEmail(e.target.value)}
-								placeholder="user@example.com"
-								required
-							/>
+							<Label htmlFor="searchUsers">Search Users</Label>
+							<div className="relative">
+								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+								<Input
+									id="searchUsers"
+									type="text"
+									value={searchQuery}
+									onChange={(e) => setSearchQuery(e.target.value)}
+									placeholder="Search by name or email..."
+									className="pl-10"
+								/>
+								{searching && (
+									<div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+										<Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+									</div>
+								)}
+							</div>
 							<p className="text-xs text-gray-500">
-								The user must already have an account
+								Search for users by name or email to add them to the
+								organization
 							</p>
 						</div>
-						<div className="flex justify-end space-x-2">
+
+						{searchResults.length > 0 && (
+							<div className="space-y-2 max-h-60 overflow-y-auto">
+								<Label>Search Results</Label>
+								{searchResults.map((user) => (
+									<div
+										key={user.id}
+										className="flex items-center justify-between p-3 border rounded-md hover:bg-gray-50">
+										<div className="flex items-center space-x-3">
+											<div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+												<span className="text-blue-600 font-medium text-sm">
+													{user.name?.[0] || user.email[0].toUpperCase()}
+												</span>
+											</div>
+											<div>
+												<p className="text-sm font-medium text-gray-900">
+													{user.name || 'No name'}
+												</p>
+												<p className="text-xs text-gray-600">{user.email}</p>
+											</div>
+										</div>
+										<div className="flex gap-2">
+											<Button
+												size="sm"
+												variant="outline"
+												onClick={() => handleAddMember(user.id, 'MEMBER')}
+												disabled={addingMember}>
+												{addingMember ? (
+													<Loader2 className="h-3 w-3 animate-spin" />
+												) : (
+													'Add'
+												)}
+											</Button>
+											<Button
+												size="sm"
+												onClick={() => handleAddMember(user.id, 'ADMIN')}
+												disabled={addingMember}>
+												{addingMember ? (
+													<Loader2 className="h-3 w-3 animate-spin" />
+												) : (
+													'Add Admin'
+												)}
+											</Button>
+										</div>
+									</div>
+								))}
+							</div>
+						)}
+
+						{searchQuery.length >= 2 &&
+							!searching &&
+							searchResults.length === 0 && (
+								<div className="text-center py-4 text-sm text-gray-500">
+									No users found matching "{searchQuery}"
+								</div>
+							)}
+
+						<div className="flex justify-end space-x-2 pt-4 border-t">
 							<Button
 								type="button"
 								variant="outline"
 								onClick={() => {
 									setIsAddMemberDialogOpen(false);
-									setMemberEmail('');
+									setSearchQuery('');
+									setSearchResults([]);
 									setError('');
 								}}>
-								Cancel
+								Close
 							</Button>
-							<Button type="submit">Add Member</Button>
 						</div>
-					</form>
+					</div>
 				</DialogContent>
 			</Dialog>
 		</div>

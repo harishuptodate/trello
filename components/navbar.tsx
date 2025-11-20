@@ -79,13 +79,15 @@ export default function Navbar({
 			<header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
 				<div className="w-full px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
 					<div className="flex items-center justify-between gap-2 sm:gap-3">
-						{/* Logo */}
-						<div className="flex items-center space-x-2 shrink-0">
-							<Trello className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-							<span className="text-lg sm:text-xl font-bold text-gray-900">
-								Trello
-							</span>
-						</div>
+						<Link href="/">
+							{/* Logo */}
+							<div className="flex items-center space-x-2 shrink-0">
+								<Trello className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+								<span className="text-lg sm:text-xl font-bold text-gray-900">
+									Trello
+								</span>
+							</div>
+						</Link>
 						{/* Center: Search Bar + Create Button */}
 						<div className="flex items-center gap-2 sm:gap-3 flex-1 justify-center max-w-2xl">
 							<Link href="/organizations">
@@ -259,14 +261,17 @@ export default function Navbar({
 	return (
 		<header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
 			<div className="w-full px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between">
-				<div className="flex items-center space-x-2">
-					<Trello className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
-					<span className="text-xl sm:text-2xl font-bold text-gray-900">
-						Trello
-					</span>
-				</div>
+				<Link href="/">
+					<div className="flex items-center space-x-2">
+						<Trello className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
+						<span className="text-xl sm:text-2xl font-bold text-gray-900">
+							Trello
+						</span>
+					</div>
+				</Link>
 				<div className="flex items-center space-x-2 sm:space-x-4">
 					{isSignedIn ? (
+						<>
 						<div className="flex flex-col sm:flex-row items-end sm:items-center space-y-1 sm:space-y-0">
 							<span className="text-xs sm:text-sm text-shadow-gray-600 hidden sm:block mr-2 sm:mr-4">
 								Welcome,{' '}
@@ -276,13 +281,40 @@ export default function Navbar({
 										  session.user.email.split('@')[0].slice(1)
 										: 'User')}
 							</span>
-							<Link href="/dashboard">
-								<Button size="sm" className="text-xs sm:text-sm cursor-pointer">
-									Go to Dashboard <ArrowRight />
-								</Button>
-							</Link>
 						</div>
-					) : (
+
+						<div className="shrink-0 relative">
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-8 gap-2"
+									onClick={() => setUserMenuOpen(!userMenuOpen)}>
+									<User className="h-4 w-4" />
+									<ChevronDown className="h-4 w-4" />
+								</Button>
+								{userMenuOpen && (
+									<div className="absolute right-0 mt-2 w-48 bg-white border rounded-md shadow-lg z-50">
+										<div className="p-2 border-b">
+											<p className="text-sm font-medium truncate">
+												{session?.user?.name || 'User'}
+											</p>
+											<p className="text-xs text-gray-500 truncate">
+												{session?.user?.email}
+											</p>
+										</div>
+										<button
+											onClick={handleSignOut}
+											className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2">
+											<LogOut className="h-4 w-4" />
+											Sign Out
+										</button>
+									</div>
+								)}
+							</div>
+						</>
+				
+				
+				) : (
 						<div>
 							<Link href="/auth/signin">
 								<Button
