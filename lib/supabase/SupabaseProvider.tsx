@@ -1,4 +1,4 @@
-'use client';
+/* 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -37,7 +37,7 @@ export default function SupabaseProvider({
 
 	return (
 		<Context.Provider value={{ supabase, isLoaded }}>
-			{/* {!isLoaded ? <div> Loading...</div> : children} */}
+			// {!isLoaded ? <div> Loading...</div> : children}
 			{children}
 		</Context.Provider>
 	);
@@ -50,3 +50,4 @@ export const useSupabase = () => {
 	}
 	return context;
 };
+*/

@@ -1,4 +1,4 @@
-export type Board = {
+/* export type Board = {
 	id: string;
 	title: string;
 	description: string | null;
@@ -31,3 +31,4 @@ export type Task = {
 };
 
 export type ColumnWithTasks = Column & { tasks: Task[] };
+*/

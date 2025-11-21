@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ import {
 import Link from 'next/link';
 import { Github } from 'lucide-react';
 
-export default function SignInPage() {
+function SignInForm() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
@@ -129,5 +129,13 @@ export default function SignInPage() {
 				</CardContent>
 			</Card>
 		</div>
+	);
+}
+
+export default function SignInPage() {
+	return (
+		<Suspense fallback={<div className="min-h-screen animate-pulse flex items-center justify-center bg-gray-50">Loading...</div>}>
+			<SignInForm />
+		</Suspense>
 	);
 }
