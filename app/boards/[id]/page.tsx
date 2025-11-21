@@ -1108,41 +1108,57 @@ export default function BoardPage() {
 			const taskId = active.id as string;
 			const overId = over.id as string;
 
-			const targetColumn = columns.find((col) => col.id === overId);
-			if (targetColumn) {
-				const sourceColumn = columns.find((col) =>
-					col.tasks.some((task) => task.id === taskId),
-				);
-
-				if (sourceColumn && sourceColumn.id !== targetColumn.id) {
-					await moveTask(taskId, targetColumn.id, targetColumn.tasks.length);
-				}
-			} else {
-				// Check to see if were dropping on another task
-				const sourceColumn = columns.find((col) =>
-					col.tasks.some((task) => task.id === taskId),
-				);
-
-				const targetColumn = columns.find((col) =>
-					col.tasks.some((task) => task.id === overId),
-				);
-
-				if (sourceColumn && targetColumn) {
-					const oldIndex = sourceColumn.tasks.findIndex(
-						(task) => task.id === taskId,
+			// Get the latest columns state to account for handleDragOver's optimistic updates
+			setColumns((currentColumns) => {
+				const targetColumn = currentColumns.find((col) => col.id === overId);
+				if (targetColumn) {
+					// Dropping on a column
+					const sourceColumn = currentColumns.find((col) =>
+						col.tasks.some((task) => task.id === taskId),
 					);
 
-					const newIndex = targetColumn.tasks.findIndex(
-						(task) => task.id === overId,
+					if (sourceColumn && sourceColumn.id !== targetColumn.id) {
+						// Moving to a different column
+						moveTask(taskId, targetColumn.id, targetColumn.tasks.length).catch(
+							console.error,
+						);
+					}
+				} else {
+					// Dropping on another task
+					const sourceColumn = currentColumns.find((col) =>
+						col.tasks.some((task) => task.id === taskId),
 					);
 
-					if (oldIndex !== newIndex) {
-						await moveTask(taskId, targetColumn.id, newIndex);
+					const targetColumn = currentColumns.find((col) =>
+						col.tasks.some((task) => task.id === overId),
+					);
+
+					if (sourceColumn && targetColumn) {
+						// Find the current position after handleDragOver's optimistic update
+						const currentIndex = sourceColumn.tasks.findIndex(
+							(task) => task.id === taskId,
+						);
+
+						const targetIndex = targetColumn.tasks.findIndex(
+							(task) => task.id === overId,
+						);
+
+						// Always persist the move if positions are different
+						// This handles both same-column and cross-column moves
+						if (
+							currentIndex !== targetIndex ||
+							sourceColumn.id !== targetColumn.id
+						) {
+							moveTask(taskId, targetColumn.id, targetIndex).catch(
+								console.error,
+							);
+						}
 					}
 				}
-			}
+				return currentColumns;
+			});
 		},
-		[columns, moveTask],
+		[moveTask],
 	);
 
 	const handleCreateColumn = useCallback(

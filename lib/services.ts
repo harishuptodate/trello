@@ -176,12 +176,94 @@ export const taskService = {
 	},
 
 	async moveTask(taskId: string, newColumnId: string, newSortOrder: number) {
-		return prisma.task.update({
+		// Get the task being moved
+		const task = await prisma.task.findUnique({
 			where: { id: taskId },
-			data: {
-				columnId: newColumnId,
-				sortOrder: newSortOrder,
-			},
+		});
+
+		if (!task) {
+			throw new Error('Task not found');
+		}
+
+		const oldColumnId = task.columnId;
+		const isSameColumn = oldColumnId === newColumnId;
+
+		if (isSameColumn) {
+			// Reordering within the same column
+			// Get all tasks in the column, ordered by sortOrder
+			const allTasks = await prisma.task.findMany({
+				where: { columnId: oldColumnId },
+				orderBy: { sortOrder: 'asc' },
+			});
+
+			const oldIndex = allTasks.findIndex((t) => t.id === taskId);
+			if (oldIndex === -1) {
+				throw new Error('Task not found in column');
+			}
+
+			// Remove the task from its current position
+			const reorderedTasks = allTasks.filter((t) => t.id !== taskId);
+			// Insert it at the new position
+			reorderedTasks.splice(newSortOrder, 0, task);
+
+			// Update sortOrder for all tasks in the column
+			await prisma.$transaction(
+				reorderedTasks.map((t, index) =>
+					prisma.task.update({
+						where: { id: t.id },
+						data: { sortOrder: index },
+					}),
+				),
+			);
+		} else {
+			// Moving to a different column
+			// Get all tasks in both columns
+			const [oldColumnTasks, newColumnTasks] = await Promise.all([
+				prisma.task.findMany({
+					where: { columnId: oldColumnId },
+					orderBy: { sortOrder: 'asc' },
+				}),
+				prisma.task.findMany({
+					where: { columnId: newColumnId },
+					orderBy: { sortOrder: 'asc' },
+				}),
+			]);
+
+			// Remove the moved task from old column
+			const updatedOldColumnTasks = oldColumnTasks.filter(
+				(t) => t.id !== taskId,
+			);
+
+			// Insert task into new column at the specified position
+			const updatedNewColumnTasks = [...newColumnTasks];
+			updatedNewColumnTasks.splice(newSortOrder, 0, task);
+
+			// Prepare update operations
+			const updates = [
+				// Update old column tasks (reorder after removing the moved task)
+				...updatedOldColumnTasks.map((t, index) =>
+					prisma.task.update({
+						where: { id: t.id },
+						data: { sortOrder: index },
+					}),
+				),
+				// Update new column tasks (including the moved task)
+				...updatedNewColumnTasks.map((t, index) =>
+					prisma.task.update({
+						where: { id: t.id },
+						data: {
+							columnId: newColumnId,
+							sortOrder: index,
+						},
+					}),
+				),
+			];
+
+			await prisma.$transaction(updates);
+		}
+
+		return prisma.task.findUnique({
+			where: { id: taskId },
 		});
 	},
 
@@ -250,7 +332,7 @@ export const boardDataService = {
 			},
 		});
 
-		if (!board) throw new Error('Board not found'); 
+		if (!board) throw new Error('Board not found');
 
 		return board as BoardWithColumns;
 	},
