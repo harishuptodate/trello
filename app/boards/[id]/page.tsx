@@ -859,6 +859,13 @@ export default function BoardPage() {
 		loading,
 		error,
 	} = useBoard(id);
+
+	// Ref to track latest columns state for drag handlers
+	const columnsRef = useRef(columns);
+	useEffect(() => {
+		columnsRef.current = columns;
+	}, [columns]);
+
 	const [isEditngTitle, setIsEditingTitle] = useState(false);
 	const [newTitle, setNewTitle] = useState('');
 	const [newColor, setNewColor] = useState('');
@@ -1103,60 +1110,78 @@ export default function BoardPage() {
 	const handleDragEnd = useCallback(
 		async (event: DragEndEvent) => {
 			const { active, over } = event;
-			if (!over) return;
+			if (!over) {
+				setActiveTask(null);
+				return;
+			}
 
 			const taskId = active.id as string;
 			const overId = over.id as string;
 
-			// Get the latest columns state to account for handleDragOver's optimistic updates
-			setColumns((currentColumns) => {
-				const targetColumn = currentColumns.find((col) => col.id === overId);
-				if (targetColumn) {
-					// Dropping on a column
-					const sourceColumn = currentColumns.find((col) =>
-						col.tasks.some((task) => task.id === taskId),
-					);
+			setActiveTask(null);
 
-					if (sourceColumn && sourceColumn.id !== targetColumn.id) {
-						// Moving to a different column
-						moveTask(taskId, targetColumn.id, targetColumn.tasks.length).catch(
-							console.error,
-						);
-					}
-				} else {
-					// Dropping on another task
-					const sourceColumn = currentColumns.find((col) =>
-						col.tasks.some((task) => task.id === taskId),
-					);
+			// Use ref to get the latest columns state (includes handleDragOver's optimistic updates)
+			const currentColumns = columnsRef.current;
 
-					const targetColumn = currentColumns.find((col) =>
-						col.tasks.some((task) => task.id === overId),
-					);
+			// Check if dropping on a column (column ID matches overId)
+			const targetColumn = currentColumns.find((col) => col.id === overId);
+			if (targetColumn) {
+				// Dropping directly on a column
+				const sourceColumn = currentColumns.find((col) =>
+					col.tasks.some((task) => task.id === taskId),
+				);
 
-					if (sourceColumn && targetColumn) {
-						// Find the current position after handleDragOver's optimistic update
-						const currentIndex = sourceColumn.tasks.findIndex(
-							(task) => task.id === taskId,
-						);
-
-						const targetIndex = targetColumn.tasks.findIndex(
-							(task) => task.id === overId,
-						);
-
-						// Always persist the move if positions are different
-						// This handles both same-column and cross-column moves
-						if (
-							currentIndex !== targetIndex ||
-							sourceColumn.id !== targetColumn.id
-						) {
-							moveTask(taskId, targetColumn.id, targetIndex).catch(
-								console.error,
-							);
-						}
+				if (sourceColumn && sourceColumn.id !== targetColumn.id) {
+					// Moving to a different column - append to end
+					try {
+						await moveTask(taskId, targetColumn.id, targetColumn.tasks.length);
+					} catch (error) {
+						console.error('Failed to move task to column:', error);
 					}
 				}
-				return currentColumns;
-			});
+				return;
+			}
+
+			// Dropping on another task
+			const sourceColumn = currentColumns.find((col) =>
+				col.tasks.some((task) => task.id === taskId),
+			);
+
+			const targetTaskColumn = currentColumns.find((col) =>
+				col.tasks.some((task) => task.id === overId),
+			);
+
+			if (!sourceColumn || !targetTaskColumn) {
+				console.warn('Could not find source or target column for task move');
+				return;
+			}
+
+			// Find indices - use current columns state which includes handleDragOver's optimistic updates
+			const currentIndex = sourceColumn.tasks.findIndex(
+				(task) => task.id === taskId,
+			);
+			const targetIndex = targetTaskColumn.tasks.findIndex(
+				(task) => task.id === overId,
+			);
+
+			// Check if move is needed
+			const needsMove =
+				currentIndex !== targetIndex || sourceColumn.id !== targetTaskColumn.id;
+
+			if (needsMove) {
+				try {
+					console.log('Moving task:', {
+						taskId,
+						targetColumnId: targetTaskColumn.id,
+						targetIndex,
+						currentIndex,
+						sameColumn: sourceColumn.id === targetTaskColumn.id,
+					});
+					await moveTask(taskId, targetTaskColumn.id, targetIndex);
+				} catch (error) {
+					console.error('Failed to move task:', error);
+				}
+			}
 		},
 		[moveTask],
 	);
