@@ -250,7 +250,7 @@ export const boardDataService = {
 			},
 		});
 
-		if (!board) throw new Error('Board not found');
+		if (!board) throw new Error('Board not found'); 
 
 		return board as BoardWithColumns;
 	},

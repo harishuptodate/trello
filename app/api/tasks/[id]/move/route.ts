@@ -12,16 +12,17 @@ const moveTaskSchema = z.object({
 
 export async function PUT(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
+		const { id } = await params;
 		const body = await request.json();
 		const { newColumnId, newSortOrder } = moveTaskSchema.parse(body);
 
 		// Get task to find board
 		const task = await prisma.task.findUnique({
-			where: { id: params.id },
+			where: { id: id },
 			include: {
 				column: {
 					include: {
@@ -63,7 +64,7 @@ export async function PUT(
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
-		await taskService.moveTask(params.id, newColumnId, newSortOrder);
+		await taskService.moveTask(id, newColumnId, newSortOrder);
 		return NextResponse.json({ success: true });
 	} catch (error) {
 		if (error instanceof z.ZodError) {

@@ -93,7 +93,7 @@ export default function Navbar({
 							<Link href="/organizations">
 								<Button variant="ghost" size="sm" className="h-8">
 									<Building2 className="h-4 w-4 mr-2" />
-									<span className="hidden sm:inline">Organizations</span>
+									<span className="hidden cursor-pointer sm:inline">Organizations</span>
 								</Button>
 							</Link>
 							{organizations.length > 0 && (
@@ -103,12 +103,12 @@ export default function Navbar({
 										setSelectedOrgId(value);
 										onOrgChange?.(value);
 									}}>
-									<SelectTrigger className="w-[180px] h-8">
+									<SelectTrigger className="cursor-pointer w-[180px] h-8">
 										<SelectValue placeholder="Select organization" />
 									</SelectTrigger>
 									<SelectContent>
 										{organizations.map((org) => (
-											<SelectItem key={org.id} value={org.organization.id}>
+											<SelectItem key={org.id} value={org.organization.id} className="cursor-pointer">
 												{org.organization.name}
 											</SelectItem>
 										))}
@@ -128,7 +128,7 @@ export default function Navbar({
 								/>
 							</div>
 							{onCreateBoardClick && (
-								<Button onClick={onCreateBoardClick} className="shrink-0 h-8">
+								<Button onClick={onCreateBoardClick} className="shrink-0 h-8 cursor-pointer">
 									<Plus className="h-4 w-4" />
 									<span className="hidden sm:inline">Create</span>
 								</Button>
@@ -139,7 +139,7 @@ export default function Navbar({
 							<Button
 								variant="ghost"
 								size="sm"
-								className="h-8 gap-2"
+								className="h-8 gap-2 cursor-pointer"
 								onClick={() => setUserMenuOpen(!userMenuOpen)}>
 								<User className="h-4 w-4" />
 								<span className="hidden sm:inline truncate max-w-[100px]">
@@ -227,8 +227,8 @@ export default function Navbar({
 								<Button
 									variant="ghost"
 									size="sm"
-									className="h-8 gap-2"
-									onClick={() => setUserMenuOpen(!userMenuOpen)}>
+									className="h-8 gap-2 cursor-pointer"
+									onClick={() => setUserMenuOpen((prev) => !prev)}>
 									<User className="h-4 w-4" />
 									<ChevronDown className="h-4 w-4" />
 								</Button>
@@ -269,11 +269,11 @@ export default function Navbar({
 						</span>
 					</div>
 				</Link>
-				<div className="flex items-center space-x-2 sm:space-x-4">
+				<div className="flex items-center space-x-2 justify-end sm:space-x-4">
 					{isSignedIn ? (
-						<>
+						<div className="flex items-center space-x-2">
 						<div className="flex flex-col sm:flex-row items-end sm:items-center space-y-1 sm:space-y-0">
-							<span className="text-xs sm:text-sm text-shadow-gray-600 hidden sm:block mr-2 sm:mr-4">
+							<span className="text-xs font-semibold sm:text-sm text-shadow-gray-600 hidden sm:block mr-2 sm:mr-4">
 								Welcome,{' '}
 								{session?.user?.name ||
 									(session?.user?.email
@@ -287,7 +287,7 @@ export default function Navbar({
 								<Button
 									variant="ghost"
 									size="sm"
-									className="h-8 gap-2"
+									className="h-8 gap-2 cursor-pointer"
 									onClick={() => setUserMenuOpen(!userMenuOpen)}>
 									<User className="h-4 w-4" />
 									<ChevronDown className="h-4 w-4" />
@@ -311,7 +311,7 @@ export default function Navbar({
 									</div>
 								)}
 							</div>
-						</>
+						</div>
 				
 				
 				) : (

@@ -6,11 +6,12 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-		const board = await boardService.getBoard(params.id);
+		const { id } = await params;
+		const board = await boardService.getBoard(id);
 
 		const hasAccess = await hasOrgAccess(user.id, board.organizationId);
 		if (!hasAccess) {
@@ -25,11 +26,12 @@ export async function GET(
 
 export async function PUT(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-		const board = await boardService.getBoard(params.id);
+			const { id } = await params;
+		const board = await boardService.getBoard(id);
 
 		const hasAccess = await hasOrgAccess(user.id, board.organizationId);
 		if (!hasAccess) {
@@ -37,7 +39,7 @@ export async function PUT(
 		}
 
 		const body = await request.json();
-		const updatedBoard = await boardService.updateBoard(params.id, body);
+		const updatedBoard = await boardService.updateBoard(id, body);
 
 		return NextResponse.json(updatedBoard);
 	} catch (error) {
@@ -50,18 +52,19 @@ export async function PUT(
 
 export async function DELETE(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-		const board = await boardService.getBoard(params.id);
+		const { id } = await params;
+		const board = await boardService.getBoard(id);
 
 		const hasAccess = await hasOrgAccess(user.id, board.organizationId);
 		if (!hasAccess) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
-		await boardService.deleteBoard(params.id);
+		await boardService.deleteBoard(id);
 		return NextResponse.json({ success: true });
 	} catch (error) {
 		return NextResponse.json(

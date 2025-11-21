@@ -12,18 +12,19 @@ const addMemberSchema = z.object({
 
 export async function GET(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-		const hasAccess = await hasOrgAccess(user.id, params.id);
+		const { id } = await params;
+		const hasAccess = await hasOrgAccess(user.id, id);
 
 		if (!hasAccess) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
 		// All members can view the member list
-		const members = await getOrgMembers(params.id);
+		const members = await getOrgMembers(id);
 		return NextResponse.json(members);
 	} catch (error) {
 		return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,11 +33,12 @@ export async function GET(
 
 export async function POST(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-		const isAdmin = await isOrgAdmin(user.id, params.id);
+		const { id } = await params;
+		const isAdmin = await isOrgAdmin(user.id, id);
 
 		if (!isAdmin) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -58,7 +60,7 @@ export async function POST(
 		const existingMember = await prisma.organizationMember.findUnique({
 			where: {
 				organizationId_userId: {
-					organizationId: params.id,
+					organizationId: id,
 					userId: targetUser.id,
 				},
 			},
@@ -72,7 +74,7 @@ export async function POST(
 		}
 
 		const member = await organizationMemberService.addMember(
-			params.id,
+			id,
 			targetUser.id,
 			role,
 		);
@@ -90,11 +92,12 @@ export async function POST(
 
 export async function DELETE(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-		const isAdmin = await isOrgAdmin(user.id, params.id);
+		const { id } = await params;
+		const isAdmin = await isOrgAdmin(user.id, id);
 
 		if (!isAdmin) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -110,7 +113,7 @@ export async function DELETE(
 			);
 		}
 
-		await organizationMemberService.removeMember(params.id, userId);
+		await organizationMemberService.removeMember(id, userId as string);
 		return NextResponse.json({ success: true });
 	} catch (error) {
 		return NextResponse.json(

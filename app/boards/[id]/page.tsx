@@ -31,7 +31,7 @@ import {
 	Loader2,
 } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import {
 	DndContext,
 	DragEndEvent,
@@ -96,7 +96,7 @@ type TaskFormProps = {
 	onClose: () => void;
 };
 // dialog is not closing after creating the task fix it, but when updating the task, the dialog is closing.
-// fix is : 
+// fix is :
 function TaskForm({
 	columnId,
 	boardId,
@@ -111,13 +111,7 @@ function TaskForm({
 	const [loadingMembers, setLoadingMembers] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 
-	useEffect(() => {
-		if (boardId || columnId) {
-			loadOrgMembers();
-		}
-	}, [boardId, columnId]);
-
-	async function loadOrgMembers() {
+	const loadOrgMembers = useCallback(async () => {
 		try {
 			setLoadingMembers(true);
 			let organizationId: string | null = null;
@@ -156,7 +150,13 @@ function TaskForm({
 		} finally {
 			setLoadingMembers(false);
 		}
-	}
+	}, [boardId, columnId]);
+
+	useEffect(() => {
+		if (boardId || columnId) {
+			loadOrgMembers();
+		}
+	}, [boardId, columnId, loadOrgMembers]);
 
 	const isEditMode = !!(task && task.id && task.id.trim() !== '');
 	const [title, setTitle] = useState(task?.title || '');
@@ -172,12 +172,20 @@ function TaskForm({
 		(task?.checklist as ChecklistItem[]) || [],
 	);
 
-	// Calculate checklist progress
-	const completedCount = checklist.filter((item) => item.completed).length;
-	const totalCount = checklist.length;
-	const progressPercentage =
-		totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-	const isComplete = totalCount > 0 && completedCount === totalCount;
+	// Calculate checklist progress - memoized
+	const { completedCount, totalCount, progressPercentage, isComplete } =
+		useMemo(() => {
+			const completed = checklist.filter((item) => item.completed).length;
+			const total = checklist.length;
+			const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+			const complete = total > 0 && completed === total;
+			return {
+				completedCount: completed,
+				totalCount: total,
+				progressPercentage: progress,
+				isComplete: complete,
+			};
+		}, [checklist]);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -227,22 +235,24 @@ function TaskForm({
 		}
 	};
 
-	const addChecklistItem = () => {
-		setChecklist([...checklist, { item: '', completed: false }]);
-	};
+	const addChecklistItem = useCallback(() => {
+		setChecklist((prev) => [...prev, { item: '', completed: false }]);
+	}, []);
 
-	const updateChecklistItem = (
-		index: number,
-		updates: Partial<ChecklistItem>,
-	) => {
-		const updated = [...checklist];
-		updated[index] = { ...updated[index], ...updates };
-		setChecklist(updated);
-	};
+	const updateChecklistItem = useCallback(
+		(index: number, updates: Partial<ChecklistItem>) => {
+			setChecklist((prev) => {
+				const updated = [...prev];
+				updated[index] = { ...updated[index], ...updates };
+				return updated;
+			});
+		},
+		[],
+	);
 
-	const removeChecklistItem = (index: number) => {
-		setChecklist(checklist.filter((_, i) => i !== index));
-	};
+	const removeChecklistItem = useCallback((index: number) => {
+		setChecklist((prev) => prev.filter((_, i) => i !== index));
+	}, []);
 
 	return (
 		<form className="space-y-4" onSubmit={handleSubmit}>
@@ -415,7 +425,7 @@ function TaskForm({
 	);
 }
 
-function DroppableColumn({
+const DroppableColumn = memo(function DroppableColumn({
 	column,
 	children,
 	onCreateTask,
@@ -427,6 +437,97 @@ function DroppableColumn({
 	onEditColumn: (column: ColumnWithTasks) => void;
 }) {
 	const { setNodeRef, isOver } = useDroppable({ id: column.id });
+	const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
+	const [isDraggingScroll, setIsDraggingScroll] = useState(false);
+	const [startY, setStartY] = useState(0);
+	const [scrollTop, setScrollTop] = useState(0);
+
+	// Vertical drag-to-scroll handlers
+	const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+		// Only start drag-to-scroll if clicking on the container itself, not on interactive elements
+		const target = e.target as HTMLElement;
+		if (
+			target.closest('button') ||
+			target.closest('[role="button"]') ||
+			target.closest('input') ||
+			target.closest('textarea') ||
+			target.closest('select') ||
+			target.closest('[data-draggable]') ||
+			target.closest('[data-sortable-id]')
+		) {
+			return;
+		}
+
+		// Only enable drag-to-scroll on large screens (lg breakpoint)
+		if (window.innerWidth < 1024) {
+			return;
+		}
+
+		if (scrollContainerRef.current) {
+			setIsDraggingScroll(true);
+			const rect = scrollContainerRef.current.getBoundingClientRect();
+			setStartY(e.pageY - rect.top);
+			setScrollTop(scrollContainerRef.current.scrollTop);
+			scrollContainerRef.current.style.userSelect = 'none';
+		}
+	}, []);
+
+	const handleMouseMove = useCallback(
+		(e: React.MouseEvent<HTMLDivElement>) => {
+			if (!isDraggingScroll || !scrollContainerRef.current) return;
+			e.preventDefault();
+			const rect = scrollContainerRef.current.getBoundingClientRect();
+			const y = e.pageY - rect.top;
+			const walk = (y - startY) * 2; // Scroll speed multiplier
+			scrollContainerRef.current.scrollTop = scrollTop - walk;
+		},
+		[isDraggingScroll, startY, scrollTop],
+	);
+
+	const handleMouseUp = useCallback(() => {
+		if (scrollContainerRef.current) {
+			setIsDraggingScroll(false);
+			scrollContainerRef.current.style.userSelect = '';
+		}
+	}, []);
+
+	const handleMouseLeave = useCallback(() => {
+		if (scrollContainerRef.current) {
+			setIsDraggingScroll(false);
+			scrollContainerRef.current.style.userSelect = '';
+		}
+	}, []);
+
+	// Global mouse event handlers for vertical drag-to-scroll
+	useEffect(() => {
+		const handleGlobalMouseMove = (e: MouseEvent) => {
+			if (!isDraggingScroll || !scrollContainerRef.current) return;
+			e.preventDefault();
+			const rect = scrollContainerRef.current.getBoundingClientRect();
+			const y = e.pageY - rect.top;
+			const walk = (y - startY) * 2;
+			scrollContainerRef.current.scrollTop = scrollTop - walk;
+		};
+
+		const handleGlobalMouseUp = () => {
+			if (scrollContainerRef.current) {
+				setIsDraggingScroll(false);
+				scrollContainerRef.current.style.userSelect = '';
+			}
+		};
+
+		if (isDraggingScroll) {
+			document.addEventListener('mousemove', handleGlobalMouseMove);
+			document.addEventListener('mouseup', handleGlobalMouseUp);
+		}
+
+		return () => {
+			document.removeEventListener('mousemove', handleGlobalMouseMove);
+			document.removeEventListener('mouseup', handleGlobalMouseUp);
+		};
+	}, [isDraggingScroll, startY, scrollTop]);
+
 	return (
 		<div
 			ref={setNodeRef}
@@ -434,11 +535,12 @@ function DroppableColumn({
 				isOver ? 'bg-blue-50' : ''
 			}`}>
 			<div
-				className={`bg-white rounded-lg shadow-sm border ${
+				className={`bg-white rounded-lg shadow-sm border flex flex-col ${
 					isOver ? 'ring-2 ring-blue-300' : ''
-				}`}>
+				}`}
+				style={{ maxHeight: 'calc(100vh - 200px)' }}>
 				{/* Column Header */}
-				<div className="p-3 sm:p-4 border-b">
+				<div className="p-3 sm:p-4 border-b flex-shrink-0">
 					<div className="flex items-center justify-between">
 						<div className="flex items-center space-x-2 min-w-0">
 							<h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
@@ -458,13 +560,23 @@ function DroppableColumn({
 					</div>
 				</div>
 				{/* columns content */}
-				<div className=" p-2">
-					{children}
-					<Dialog>
+				<div className="p-2 flex flex-col flex-1 min-h-0">
+					<div
+						ref={scrollContainerRef}
+						onMouseDown={handleMouseDown}
+						onMouseMove={handleMouseMove}
+						onMouseUp={handleMouseUp}
+						onMouseLeave={handleMouseLeave}
+						className={`flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
+							isDraggingScroll ? 'lg:cursor-grabbing' : 'lg:cursor-grab'
+						}`}>
+						{children}
+					</div>
+					<Dialog open={isCreateTaskOpen} onOpenChange={setIsCreateTaskOpen}>
 						<DialogTrigger asChild>
 							<Button
 								variant="secondary"
-								className="w-full mt-3 text-gray-500 hover:text-gray-700">
+								className="w-full mt-3 text-gray-500 hover:text-gray-700 flex-shrink-0">
 								<Plus />
 								Add Task
 							</Button>
@@ -481,7 +593,7 @@ function DroppableColumn({
 								boardId={column.boardId}
 								task={null}
 								onCreateTask={onCreateTask}
-								onClose={() => {}}
+								onClose={() => setIsCreateTaskOpen(false)}
 							/>
 						</DialogContent>
 					</Dialog>
@@ -489,9 +601,9 @@ function DroppableColumn({
 			</div>
 		</div>
 	);
-}
+});
 
-function SortableTask({
+const SortableTask = memo(function SortableTask({
 	task,
 	onEditTask,
 }: {
@@ -527,28 +639,39 @@ function SortableTask({
 		transition,
 		opacity: isDragging ? 0.5 : 1,
 	};
-	function getPriorityColor(priority: 'low' | 'medium' | 'high'): string {
-		switch (priority) {
-			case 'high':
-				return 'bg-red-500';
-			case 'medium':
-				return 'bg-yellow-500';
-			case 'low':
-				return 'bg-green-500';
-			default:
-				return 'bg-yellow-500';
-		}
-	}
+	const getPriorityColor = useCallback(
+		(priority: 'low' | 'medium' | 'high'): string => {
+			switch (priority) {
+				case 'high':
+					return 'bg-red-500';
+				case 'medium':
+					return 'bg-yellow-500';
+				case 'low':
+					return 'bg-green-500';
+				default:
+					return 'bg-yellow-500';
+			}
+		},
+		[],
+	);
 
-	// Calculate checklist progress
+	// Calculate checklist progress - memoized
 	const checklist = (task.checklist as ChecklistItem[]) || [];
-	const completedCount = checklist.filter(
-		(item: ChecklistItem) => item.completed,
-	).length;
-	const totalCount = checklist.length as number;
-	const progressPercentage =
-		totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-	const isComplete = totalCount > 0 && completedCount === totalCount;
+	const { completedCount, totalCount, progressPercentage, isComplete } =
+		useMemo(() => {
+			const completed = checklist.filter(
+				(item: ChecklistItem) => item.completed,
+			).length;
+			const total = checklist.length;
+			const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+			const complete = total > 0 && completed === total;
+			return {
+				completedCount: completed,
+				totalCount: total,
+				progressPercentage: progress,
+				isComplete: complete,
+			};
+		}, [checklist]);
 
 	return (
 		<div
@@ -641,9 +764,9 @@ function SortableTask({
 			</Card>
 		</div>
 	);
-}
+});
 
-function TaskOverlay({
+const TaskOverlay = memo(function TaskOverlay({
 	task,
 }: {
 	task: Task & {
@@ -655,18 +778,21 @@ function TaskOverlay({
 		} | null;
 	};
 }) {
-	function getPriorityColor(priority: 'low' | 'medium' | 'high'): string {
-		switch (priority) {
-			case 'high':
-				return 'bg-red-500';
-			case 'medium':
-				return 'bg-yellow-500';
-			case 'low':
-				return 'bg-green-500';
-			default:
-				return 'bg-yellow-500';
-		}
-	}
+	const getPriorityColor = useCallback(
+		(priority: 'low' | 'medium' | 'high'): string => {
+			switch (priority) {
+				case 'high':
+					return 'bg-red-500';
+				case 'medium':
+					return 'bg-yellow-500';
+				case 'low':
+					return 'bg-green-500';
+				default:
+					return 'bg-yellow-500';
+			}
+		},
+		[],
+	);
 	return (
 		<div>
 			<Card className="cursor-pointer hover:shadow-md transition-shadow">
@@ -716,7 +842,7 @@ function TaskOverlay({
 			</Card>
 		</div>
 	);
-}
+});
 
 export default function BoardPage() {
 	const { id } = useParams<{ id: string }>();
@@ -794,234 +920,285 @@ export default function BoardPage() {
 		}),
 	);
 
-	function handleFilterChange(
-		type: 'priority' | 'dueDate' | 'assignee',
-		value: string | string[] | null,
-	) {
-		setFilters((prev) => ({ ...prev, [type]: value }));
-	}
-	async function handleUpdateBoard(e: React.FormEvent) {
-		e.preventDefault();
-		if (!newTitle.trim() || !board || updatingBoardTitle) return;
-		setUpdatingBoardTitle(true);
-		try {
-			await updateBoard(board.id, {
-				title: newTitle.trim(),
-				color: newColor || board.color,
-			});
-			setIsEditingTitle(false);
-		} catch (error) {
-			console.error('Error updating board:', error);
-		} finally {
-			setUpdatingBoardTitle(false);
-		}
-	}
-	async function createTask(columnId: string, taskData: TaskData) {
-		await createRealTask(columnId, taskData);
-	}
-	async function handleCreateTask(taskData: TaskData) {
-		try {
-			// For the main "Add Task" button, use the first column as default
-			const targetColumn = columns[0];
-			if (!targetColumn) throw new Error('No columns found');
-			await createTask(targetColumn.id, taskData);
-			const trigger = document.querySelector(
-				'[data-state="open"]',
-			) as HTMLElement;
-			if (trigger) trigger.click();
-		} catch (error) {
-			console.error('Error creating task:', error);
-		}
-	}
+	// Memoize filter count
+	const filterCount = useMemo(
+		() =>
+			Object.values(filters).reduce(
+				(count, v) =>
+					count + (Array.isArray(v) ? v.length : v !== null ? 1 : 0),
+				0,
+			),
+		[filters],
+	);
 
-	function handleEditTask(
-		task: Task & {
-			assignee: {
-				id: string;
-				name: string | null;
-				email: string;
-				image: string | null;
-			} | null;
+	const handleFilterChange = useCallback(
+		(
+			type: 'priority' | 'dueDate' | 'assignee',
+			value: string | string[] | null,
+		) => {
+			setFilters((prev) => ({ ...prev, [type]: value }));
 		},
-	) {
-		setEditingTask(task);
-		// setIsEditingTask(true);
-	}
+		[],
+	);
+
+	const handleUpdateBoard = useCallback(
+		async (e: React.FormEvent) => {
+			e.preventDefault();
+			if (!newTitle.trim() || !board || updatingBoardTitle) return;
+			setUpdatingBoardTitle(true);
+			try {
+				await updateBoard(board.id, {
+					title: newTitle.trim(),
+					color: newColor || board.color,
+				});
+				setIsEditingTitle(false);
+			} catch (error) {
+				console.error('Error updating board:', error);
+			} finally {
+				setUpdatingBoardTitle(false);
+			}
+		},
+		[board, newTitle, newColor, updateBoard, updatingBoardTitle],
+	);
+
+	const createTask = useCallback(
+		async (columnId: string, taskData: TaskData) => {
+			await createRealTask(columnId, taskData);
+		},
+		[createRealTask],
+	);
+
+	const handleCreateTask = useCallback(
+		async (taskData: TaskData) => {
+			try {
+				// For the main "Add Task" button, use the first column as default
+				const targetColumn = columns[0];
+				if (!targetColumn) throw new Error('No columns found');
+				await createTask(targetColumn.id, taskData);
+				const trigger = document.querySelector(
+					'[data-state="open"]',
+				) as HTMLElement;
+				if (trigger) trigger.click();
+			} catch (error) {
+				console.error('Error creating task:', error);
+			}
+		},
+		[columns, createTask],
+	);
+
+	const handleEditTask = useCallback(
+		(
+			task: Task & {
+				assignee: {
+					id: string;
+					name: string | null;
+					email: string;
+					image: string | null;
+				} | null;
+			},
+		) => {
+			setEditingTask(task);
+			setIsEditingTask(true);
+		},
+		[],
+	);
 
 	const [updatingTask, setUpdatingTask] = useState(false);
 
-	async function handleUpdateTask(taskId: string, taskData: TaskData) {
-		if (!updateRealTask || updatingTask) return;
-		setUpdatingTask(true);
-		try {
-			await updateRealTask(taskId, {
-				title: taskData.title,
-				description: taskData.description ?? null,
-				assigneeId: taskData.assigneeId ?? null,
-				dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
-				priority: taskData.priority.toUpperCase() as 'LOW' | 'MEDIUM' | 'HIGH',
-				checklist: taskData.checklist || null,
-			});
-			setIsEditingTask(false);
-			setEditingTask(null);
-		} catch (error) {
-			console.error('Error updating task:', error);
-		} finally {
-			setUpdatingTask(false);
-		}
-	}
-
-	function handleDragStart(event: DragStartEvent) {
-		const taskId = event.active.id as string;
-		const task = columns
-			.flatMap((col) => col.tasks)
-			.find((task) => task.id === taskId);
-
-		if (task) {
-			setActiveTask(
-				task as Task & {
-					assignee: {
-						id: string;
-						name: string | null;
-						email: string;
-						image: string | null;
-					} | null;
-				},
-			);
-		}
-	}
-
-	function handleDragOver(event: DragOverEvent) {
-		const { active, over } = event;
-		if (!over) return;
-
-		const activeId = active.id as string;
-		const overId = over.id as string;
-
-		const sourceColumn = columns.find((col) =>
-			col.tasks.some((task) => task.id === activeId),
-		);
-
-		const targetColumn = columns.find((col) =>
-			col.tasks.some((task) => task.id === overId),
-		);
-
-		if (!sourceColumn || !targetColumn) return;
-
-		if (sourceColumn.id === targetColumn.id) {
-			const activeIndex = sourceColumn.tasks.findIndex(
-				(task) => task.id === activeId,
-			);
-
-			const overIndex = targetColumn.tasks.findIndex(
-				(task) => task.id === overId,
-			);
-
-			if (activeIndex !== overIndex) {
-				setColumns((prev: ColumnWithTasks[]) => {
-					const newColumns = [...prev];
-					const column = newColumns.find((col) => col.id === sourceColumn.id);
-					if (column) {
-						const tasks = [...column.tasks];
-						const [removed] = tasks.splice(activeIndex, 1);
-						tasks.splice(overIndex, 0, removed);
-						column.tasks = tasks;
-					}
-					return newColumns;
+	const handleUpdateTask = useCallback(
+		async (taskId: string, taskData: TaskData) => {
+			if (!updateRealTask || updatingTask) return;
+			setUpdatingTask(true);
+			try {
+				await updateRealTask(taskId, {
+					title: taskData.title,
+					description: taskData.description ?? null,
+					assigneeId: taskData.assigneeId ?? null,
+					dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
+					priority: taskData.priority.toUpperCase() as
+						| 'LOW'
+						| 'MEDIUM'
+						| 'HIGH',
+					checklist: taskData.checklist || null,
 				});
+				setIsEditingTask(false);
+				setEditingTask(null);
+			} catch (error) {
+				console.error('Error updating task:', error);
+			} finally {
+				setUpdatingTask(false);
 			}
-		}
-	}
+		},
+		[updateRealTask, updatingTask],
+	);
 
-	async function handleDragEnd(event: DragEndEvent) {
-		const { active, over } = event;
-		if (!over) return;
+	const handleDragStart = useCallback(
+		(event: DragStartEvent) => {
+			const taskId = event.active.id as string;
+			const task = columns
+				.flatMap((col) => col.tasks)
+				.find((task) => task.id === taskId);
 
-		const taskId = active.id as string;
-		const overId = over.id as string;
-
-		const targetColumn = columns.find((col) => col.id === overId);
-		if (targetColumn) {
-			const sourceColumn = columns.find((col) =>
-				col.tasks.some((task) => task.id === taskId),
-			);
-
-			if (sourceColumn && sourceColumn.id !== targetColumn.id) {
-				await moveTask(taskId, targetColumn.id, targetColumn.tasks.length);
+			if (task) {
+				setActiveTask(
+					task as Task & {
+						assignee: {
+							id: string;
+							name: string | null;
+							email: string;
+							image: string | null;
+						} | null;
+					},
+				);
 			}
-		} else {
-			// Check to see if were dropping on another task
+		},
+		[columns],
+	);
+
+	const handleDragOver = useCallback(
+		(event: DragOverEvent) => {
+			const { active, over } = event;
+			if (!over) return;
+
+			const activeId = active.id as string;
+			const overId = over.id as string;
+
 			const sourceColumn = columns.find((col) =>
-				col.tasks.some((task) => task.id === taskId),
+				col.tasks.some((task) => task.id === activeId),
 			);
 
 			const targetColumn = columns.find((col) =>
 				col.tasks.some((task) => task.id === overId),
 			);
 
-			if (sourceColumn && targetColumn) {
-				const oldIndex = sourceColumn.tasks.findIndex(
-					(task) => task.id === taskId,
+			if (!sourceColumn || !targetColumn) return;
+
+			if (sourceColumn.id === targetColumn.id) {
+				const activeIndex = sourceColumn.tasks.findIndex(
+					(task) => task.id === activeId,
 				);
 
-				const newIndex = targetColumn.tasks.findIndex(
+				const overIndex = targetColumn.tasks.findIndex(
 					(task) => task.id === overId,
 				);
 
-				if (oldIndex !== newIndex) {
-					await moveTask(taskId, targetColumn.id, newIndex);
+				if (activeIndex !== overIndex) {
+					setColumns((prev: ColumnWithTasks[]) => {
+						const newColumns = [...prev];
+						const column = newColumns.find((col) => col.id === sourceColumn.id);
+						if (column) {
+							const tasks = [...column.tasks];
+							const [removed] = tasks.splice(activeIndex, 1);
+							tasks.splice(overIndex, 0, removed);
+							column.tasks = tasks;
+						}
+						return newColumns;
+					});
 				}
 			}
-		}
-	}
+		},
+		[columns, setColumns],
+	);
 
-	async function handleCreateColumn(e: React.FormEvent<HTMLFormElement>) {
-		e.preventDefault();
-		if (!newColumnTitle.trim() || creatingColumn) return;
-		setCreatingColumn(true);
-		try {
-			await createRealColumn(newColumnTitle.trim());
-			setIsCreatingColumn(false);
-			setNewColumnTitle('');
-		} catch (error) {
-			console.error('Error creating column:', error);
-		} finally {
-			setCreatingColumn(false);
-		}
-	}
-	// handle update column
-	async function handleUpdateColumn(e: React.FormEvent<HTMLFormElement>) {
-		e.preventDefault();
-		if (!editingColumnTitle.trim() || !editingColumn || updatingColumn) return;
-		setUpdatingColumn(true);
-		try {
-			await updateRealColumn(editingColumn?.id, editingColumnTitle.trim());
-			setIsEditingColumn(false);
-			setEditingColumnTitle('');
-			setEditingColumn(null);
-		} catch (error) {
-			console.error('Error updating column:', error);
-		} finally {
-			setUpdatingColumn(false);
-		}
-	}
-	// handle edit column
-	function handleEditColumn(column: ColumnWithTasks) {
+	const handleDragEnd = useCallback(
+		async (event: DragEndEvent) => {
+			const { active, over } = event;
+			if (!over) return;
+
+			const taskId = active.id as string;
+			const overId = over.id as string;
+
+			const targetColumn = columns.find((col) => col.id === overId);
+			if (targetColumn) {
+				const sourceColumn = columns.find((col) =>
+					col.tasks.some((task) => task.id === taskId),
+				);
+
+				if (sourceColumn && sourceColumn.id !== targetColumn.id) {
+					await moveTask(taskId, targetColumn.id, targetColumn.tasks.length);
+				}
+			} else {
+				// Check to see if were dropping on another task
+				const sourceColumn = columns.find((col) =>
+					col.tasks.some((task) => task.id === taskId),
+				);
+
+				const targetColumn = columns.find((col) =>
+					col.tasks.some((task) => task.id === overId),
+				);
+
+				if (sourceColumn && targetColumn) {
+					const oldIndex = sourceColumn.tasks.findIndex(
+						(task) => task.id === taskId,
+					);
+
+					const newIndex = targetColumn.tasks.findIndex(
+						(task) => task.id === overId,
+					);
+
+					if (oldIndex !== newIndex) {
+						await moveTask(taskId, targetColumn.id, newIndex);
+					}
+				}
+			}
+		},
+		[columns, moveTask],
+	);
+
+	const handleCreateColumn = useCallback(
+		async (e: React.FormEvent<HTMLFormElement>) => {
+			e.preventDefault();
+			if (!newColumnTitle.trim() || creatingColumn) return;
+			setCreatingColumn(true);
+			try {
+				await createRealColumn(newColumnTitle.trim());
+				setIsCreatingColumn(false);
+				setNewColumnTitle('');
+			} catch (error) {
+				console.error('Error creating column:', error);
+			} finally {
+				setCreatingColumn(false);
+			}
+		},
+		[newColumnTitle, creatingColumn, createRealColumn],
+	);
+
+	const handleUpdateColumn = useCallback(
+		async (e: React.FormEvent<HTMLFormElement>) => {
+			e.preventDefault();
+			if (!editingColumnTitle.trim() || !editingColumn || updatingColumn)
+				return;
+			setUpdatingColumn(true);
+			try {
+				await updateRealColumn(editingColumn?.id, editingColumnTitle.trim());
+				setIsEditingColumn(false);
+				setEditingColumnTitle('');
+				setEditingColumn(null);
+			} catch (error) {
+				console.error('Error updating column:', error);
+			} finally {
+				setUpdatingColumn(false);
+			}
+		},
+		[editingColumnTitle, editingColumn, updatingColumn, updateRealColumn],
+	);
+
+	const handleEditColumn = useCallback((column: ColumnWithTasks) => {
 		setEditingColumn(column);
 		setIsEditingColumn(true);
 		setEditingColumnTitle(column.title);
-	}
+	}, []);
 
-	function clearFilters() {
+	const clearFilters = useCallback(() => {
 		setFilters({
 			priority: [],
 			dueDate: null,
 			assignee: [],
 		});
-	}
+	}, []);
 
 	// Drag-to-scroll handlers
-	const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+	const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
 		// Only start drag-to-scroll if clicking on the container itself, not on interactive elements
 		const target = e.target as HTMLElement;
 		if (
@@ -1048,30 +1225,33 @@ export default function BoardPage() {
 			setScrollLeft(scrollContainerRef.current.scrollLeft);
 			scrollContainerRef.current.style.userSelect = 'none';
 		}
-	};
+	}, []);
 
-	const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-		if (!isDraggingScroll || !scrollContainerRef.current) return;
-		e.preventDefault();
-		const rect = scrollContainerRef.current.getBoundingClientRect();
-		const x = e.pageX - rect.left;
-		const walk = (x - startX) * 2; // Scroll speed multiplier
-		scrollContainerRef.current.scrollLeft = scrollLeft - walk;
-	};
+	const handleMouseMove = useCallback(
+		(e: React.MouseEvent<HTMLDivElement>) => {
+			if (!isDraggingScroll || !scrollContainerRef.current) return;
+			e.preventDefault();
+			const rect = scrollContainerRef.current.getBoundingClientRect();
+			const x = e.pageX - rect.left;
+			const walk = (x - startX) * 2; // Scroll speed multiplier
+			scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+		},
+		[isDraggingScroll, startX, scrollLeft],
+	);
 
-	const handleMouseUp = () => {
+	const handleMouseUp = useCallback(() => {
 		if (scrollContainerRef.current) {
 			setIsDraggingScroll(false);
 			scrollContainerRef.current.style.userSelect = '';
 		}
-	};
+	}, []);
 
-	const handleMouseLeave = () => {
+	const handleMouseLeave = useCallback(() => {
 		if (scrollContainerRef.current) {
 			setIsDraggingScroll(false);
 			scrollContainerRef.current.style.userSelect = '';
 		}
-	};
+	}, []);
 
 	// Global mouse event handlers for drag-to-scroll
 	useEffect(() => {
@@ -1102,27 +1282,31 @@ export default function BoardPage() {
 		};
 	}, [isDraggingScroll, startX, scrollLeft]);
 
-	// filter columns
-	const filteredColumns = columns.map((column) => ({
-		...column,
-		tasks: column.tasks.filter((task) => {
-			if (
-				filters.priority.length > 0 &&
-				!filters.priority.includes(task.priority.toLowerCase())
-			) {
-				return false;
-			}
-			if (filters.dueDate && task.dueDate) {
-				const taskDate = new Date(task.dueDate).toDateString();
-				const filterDate = new Date(filters.dueDate ?? '').toDateString();
-				if (taskDate !== filterDate) {
-					return false;
-				}
-			}
+	// filter columns - memoized
+	const filteredColumns = useMemo(
+		() =>
+			columns.map((column) => ({
+				...column,
+				tasks: column.tasks.filter((task) => {
+					if (
+						filters.priority.length > 0 &&
+						!filters.priority.includes(task.priority.toLowerCase())
+					) {
+						return false;
+					}
+					if (filters.dueDate && task.dueDate) {
+						const taskDate = new Date(task.dueDate).toDateString();
+						const filterDate = new Date(filters.dueDate ?? '').toDateString();
+						if (taskDate !== filterDate) {
+							return false;
+						}
+					}
 
-			return true;
-		}),
-	}));
+					return true;
+				}),
+			})),
+		[columns, filters],
+	);
 
 	if (loading) {
 		return (
@@ -1156,11 +1340,7 @@ export default function BoardPage() {
 						setIsEditingTitle(true);
 					}}
 					onFilterClick={() => setIsFilterOpen(true)}
-					filterCount={Object.values(filters).reduce(
-						(count, v) =>
-							count + (Array.isArray(v) ? v.length : v !== null ? 1 : 0),
-						0,
-					)}
+					filterCount={filterCount}
 				/>
 				<Dialog open={isEditngTitle} onOpenChange={setIsEditingTitle}>
 					<DialogContent className="w-[95vw] max-w-425px mx-auto">

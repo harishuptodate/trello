@@ -25,7 +25,7 @@ export default function Home() {
 					<div className="flex flex-col sm:flex-row gap-4 justify-center">
 						{isLoggedIn ? (
 							<Link href="/dashboard">
-								<Button size="lg" className="w-full sm:w-auto">
+								<Button size="lg" className="w-full cursor-pointer sm:w-auto">
 									Go to Dashboard
 									<ArrowRight className="ml-2 h-4 w-4" />
 								</Button>

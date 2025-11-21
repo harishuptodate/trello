@@ -33,7 +33,7 @@ import {
 	Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useOrganization } from '@/lib/organization-context';
 import { useRouter } from 'next/navigation';
 
@@ -91,78 +91,94 @@ export default function DashboardPage() {
 		}
 	}, [selectedOrgId, refetch]);
 
-	const filteredBoards = boards.filter((board: BoardType) => {
-		if (!board || !board.title) return false;
+	const filteredBoards = useMemo(
+		() =>
+			boards.filter((board: BoardType) => {
+				if (!board || !board.title) return false;
 
-		const matchesSearch = board.title
-			.toLowerCase()
-			.includes(filters.search.toLowerCase());
-		const matchesDateRange =
-			!filters.dataRange.start ||
-			(new Date(board.createdAt) >= new Date(filters.dataRange.start) &&
-				(!filters.dataRange.end ||
-					new Date(board.createdAt) <= new Date(filters.dataRange.end)));
-		return matchesSearch && matchesDateRange;
-	});
+				const matchesSearch = board.title
+					.toLowerCase()
+					.includes(filters.search.toLowerCase());
+				const matchesDateRange =
+					!filters.dataRange.start ||
+					(new Date(board.createdAt) >= new Date(filters.dataRange.start) &&
+						(!filters.dataRange.end ||
+							new Date(board.createdAt) <= new Date(filters.dataRange.end)));
+				return matchesSearch && matchesDateRange;
+			}),
+		[boards, filters.search, filters.dataRange.start, filters.dataRange.end],
+	);
 
-	const handleCreateBoard = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (creatingBoard) return;
-		setCreatingBoard(true);
-		try {
-			await createBoard({
-				title: boardTitle,
-				createDefaultColumns,
-			});
-			setBoardTitle('');
-			setCreateDefaultColumns(true);
-			setIsCreateDialogOpen(false);
-		} catch (error) {
-			console.error('Error creating board:', error);
-		} finally {
-			setCreatingBoard(false);
-		}
-	};
+	const handleCreateBoard = useCallback(
+		async (e: React.FormEvent) => {
+			e.preventDefault();
+			if (creatingBoard) return;
+			setCreatingBoard(true);
+			try {
+				await createBoard({
+					title: boardTitle,
+					createDefaultColumns,
+				});
+				setBoardTitle('');
+				setCreateDefaultColumns(true);
+				setIsCreateDialogOpen(false);
+			} catch (error) {
+				console.error('Error creating board:', error);
+			} finally {
+				setCreatingBoard(false);
+			}
+		},
+		[boardTitle, createDefaultColumns, creatingBoard, createBoard],
+	);
 
-	const handleEditBoard = (board: BoardType, e: React.MouseEvent) => {
-		e.preventDefault();
-		e.stopPropagation();
-		setEditingBoard(board);
-		setEditTitle(board.title);
-		setEditColor(board.color);
-		setIsEditDialogOpen(true);
-		setOpenDropdownId(null);
-	};
+	const handleEditBoard = useCallback(
+		(board: BoardType, e: React.MouseEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			setEditingBoard(board);
+			setEditTitle(board.title);
+			setEditColor(board.color);
+			setIsEditDialogOpen(true);
+			setOpenDropdownId(null);
+		},
+		[],
+	);
 
-	const handleDeleteBoard = (board: BoardType, e: React.MouseEvent) => {
-		e.preventDefault();
-		e.stopPropagation();
-		setDeletingBoard(board);
-		setIsDeleteDialogOpen(true);
-		setOpenDropdownId(null);
-	};
+	const handleDeleteBoard = useCallback(
+		(board: BoardType, e: React.MouseEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			setDeletingBoard(board);
+			setIsDeleteDialogOpen(true);
+			setOpenDropdownId(null);
+		},
+		[],
+	);
 
-	const handleUpdateBoard = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (!editingBoard || !editTitle.trim() || updatingBoard) return;
-		setUpdatingBoard(true);
-		try {
-			await updateBoard(editingBoard.id, {
-				title: editTitle.trim(),
-				color: editColor || editingBoard.color,
-			});
-			setIsEditDialogOpen(false);
-			setEditingBoard(null);
-			setEditTitle('');
-			setEditColor('');
-		} catch (error) {
-			console.error('Error updating board:', error);
-		} finally {
-			setUpdatingBoard(false);
-		}
-	};
+	const handleUpdateBoard = useCallback(
+		async (e: React.FormEvent) => {
+			e.preventDefault();
+			if (!editingBoard || !editTitle.trim() || updatingBoard) return;
+			setUpdatingBoard(true);
+			try {
+				await updateBoard(editingBoard.id, {
+					title: editTitle.trim(),
+					color: editColor || editingBoard.color,
+				});
+				setIsEditDialogOpen(false);
+				setEditingBoard(null);
+				setEditTitle('');
+				setEditColor('');
+			} catch (error) {
+				console.error('Error updating board:', error);
+			} finally {
+				setUpdatingBoard(false);
+			}
+		},
+		[editingBoard, editTitle, editColor, updatingBoard, updateBoard],
+	);
 
-	const handleConfirmDelete = async () => {
+	const handleConfirmDelete = useCallback(async () => {
 		if (!deletingBoard || deletingBoardId) return;
 		setDeletingBoardId(deletingBoard.id);
 		try {
@@ -174,7 +190,7 @@ export default function DashboardPage() {
 		} finally {
 			setDeletingBoardId(null);
 		}
-	};
+	}, [deletingBoard, deletingBoardId, deleteBoard]);
 
 	// Close dropdown when clicking outside
 	useEffect(() => {
@@ -187,7 +203,7 @@ export default function DashboardPage() {
 		return () => document.removeEventListener('click', handleClickOutside);
 	}, [openDropdownId]);
 
-	function clearFilters() {
+	const clearFilters = useCallback(() => {
 		setFilters({
 			search: '',
 			dataRange: {
@@ -199,7 +215,7 @@ export default function DashboardPage() {
 				max: null,
 			},
 		});
-	}
+	}, []);
 
 	if (orgLoading || (loading && selectedOrgId)) {
 		return (

@@ -5,11 +5,12 @@ import { hasOrgAccess, isOrgAdmin } from '@/lib/auth-rules';
 
 export async function GET(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-		const org = await organizationService.getOrganization(params.id);
+		const { id } = await params;
+		const org = await organizationService.getOrganization(id);
 
 		if (!org) {
 			return NextResponse.json(
@@ -18,7 +19,7 @@ export async function GET(
 			);
 		}
 
-		const hasAccess = await hasOrgAccess(user.id, params.id);
+		const hasAccess = await hasOrgAccess(user.id, id);
 		if (!hasAccess) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
@@ -31,18 +32,19 @@ export async function GET(
 
 export async function PUT(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-		const isAdmin = await isOrgAdmin(user.id, params.id);
+		const { id } = await params;
+		const isAdmin = await isOrgAdmin(user.id, id);
 
 		if (!isAdmin) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
 		const body = await request.json();
-		const org = await organizationService.updateOrganization(params.id, body);
+		const org = await organizationService.updateOrganization(id, body);
 
 		return NextResponse.json(org);
 	} catch (error) {
@@ -55,17 +57,18 @@ export async function PUT(
 
 export async function DELETE(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-		const isAdmin = await isOrgAdmin(user.id, params.id);
+		const { id } = await params;
+		const isAdmin = await isOrgAdmin(user.id, id);
 
 		if (!isAdmin) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
-		await organizationService.deleteOrganization(params.id);
+		await organizationService.deleteOrganization(id);
 		return NextResponse.json({ success: true });
 	} catch (error) {
 		return NextResponse.json(

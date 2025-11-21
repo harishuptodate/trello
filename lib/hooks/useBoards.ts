@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useOrganization } from '../organization-context';
 import type { Board, Column, Task } from '@prisma/client';
@@ -21,10 +21,27 @@ export function useBoards(organizationId?: string | null) {
 	const [boards, setBoards] = useState<BoardType[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const cacheRef = useRef<{
+		orgId: string | null;
+		data: BoardType[];
+		timestamp: number;
+	} | null>(null);
+	const CACHE_DURATION = 30000; // 30 seconds
 
 	const loadBoards = useCallback(async () => {
 		if (!orgId || !session?.user) {
 			setBoards([]);
+			setLoading(false);
+			return;
+		}
+
+		// Check cache
+		if (
+			cacheRef.current &&
+			cacheRef.current.orgId === orgId &&
+			Date.now() - cacheRef.current.timestamp < CACHE_DURATION
+		) {
+			setBoards(cacheRef.current.data);
 			setLoading(false);
 			return;
 		}
@@ -36,6 +53,8 @@ export function useBoards(organizationId?: string | null) {
 			if (!response.ok) throw new Error('Failed to load boards');
 			const data = await response.json();
 			setBoards(data);
+			// Update cache
+			cacheRef.current = { orgId, data, timestamp: Date.now() };
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to load boards.');
 			setBoards([]);
@@ -79,6 +98,10 @@ export function useBoards(organizationId?: string | null) {
 
 			const newBoard = await response.json();
 			setBoards((prev) => [newBoard, ...prev]);
+			// Invalidate cache
+			if (cacheRef.current?.orgId === orgId) {
+				cacheRef.current = null;
+			}
 			return newBoard;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to create board');
@@ -100,6 +123,10 @@ export function useBoards(organizationId?: string | null) {
 			setBoards((prev) =>
 				prev.map((board) => (board.id === boardId ? updatedBoard : board)),
 			);
+			// Invalidate cache
+			if (cacheRef.current?.orgId === orgId) {
+				cacheRef.current = null;
+			}
 			return updatedBoard;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to update board');
@@ -116,6 +143,10 @@ export function useBoards(organizationId?: string | null) {
 			if (!response.ok) throw new Error('Failed to delete board');
 
 			setBoards((prev) => prev.filter((board) => board.id !== boardId));
+			// Invalidate cache
+			if (cacheRef.current?.orgId === orgId) {
+				cacheRef.current = null;
+			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to delete board');
 			throw err;
@@ -139,15 +170,29 @@ export function useBoard(boardId: string) {
 	const [columns, setColumns] = useState<ColumnWithTasks[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const boardCacheRef = useRef<{
+		boardId: string;
+		data: BoardWithColumns;
+		timestamp: number;
+	} | null>(null);
+	const BOARD_CACHE_DURATION = 30000; // 30 seconds
 
-	useEffect(() => {
-		if (boardId && session?.user) {
-			loadBoard();
-		}
-	}, [boardId, session]);
-
-	async function loadBoard() {
+	const loadBoard = useCallback(async () => {
 		if (!boardId) return;
+
+		// Check cache
+		if (
+			boardCacheRef.current &&
+			boardCacheRef.current.boardId === boardId &&
+			Date.now() - boardCacheRef.current.timestamp < BOARD_CACHE_DURATION
+		) {
+			const cachedData = boardCacheRef.current.data;
+			setBoard(cachedData);
+			setColumns((cachedData.columns || []) as ColumnWithTasks[]);
+			setLoading(false);
+			return;
+		}
+
 		try {
 			setLoading(true);
 			setError(null);
@@ -156,13 +201,25 @@ export function useBoard(boardId: string) {
 
 			const fullBoard = await response.json();
 			setBoard(fullBoard);
-			setColumns(fullBoard.columns || []);
+			setColumns((fullBoard.columns || []) as ColumnWithTasks[]);
+			// Update cache
+			boardCacheRef.current = {
+				boardId,
+				data: fullBoard,
+				timestamp: Date.now(),
+			};
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to load board.');
 		} finally {
 			setLoading(false);
 		}
-	}
+	}, [boardId]);
+
+	useEffect(() => {
+		if (boardId && session?.user) {
+			loadBoard();
+		}
+	}, [boardId, session, loadBoard]);
 
 	async function updateBoard(boardId: string, updates: Partial<Board>) {
 		try {
@@ -176,6 +233,10 @@ export function useBoard(boardId: string) {
 
 			const updatedBoard = await response.json();
 			setBoard((prev) => (prev ? { ...prev, ...updatedBoard } : null));
+			// Invalidate cache
+			if (boardCacheRef.current?.boardId === boardId) {
+				boardCacheRef.current = null;
+			}
 			return updatedBoard;
 		} catch (err) {
 			setError(
@@ -209,7 +270,10 @@ export function useBoard(boardId: string) {
 						: col,
 				),
 			);
-
+			// Invalidate cache
+			if (boardCacheRef.current?.boardId === boardId) {
+				boardCacheRef.current = null;
+			}
 			return newTask;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to create task.');
@@ -247,12 +311,27 @@ export function useBoard(boardId: string) {
 				if (taskToMove) {
 					const targetColumn = newColumns.find((col) => col.id === newColumnId);
 					if (targetColumn) {
-						targetColumn.tasks.splice(newSortOrder, 0, taskToMove as unknown as Task & { assignee: { id: string; name: string | null; email: string; image: string | null } | null });
+						targetColumn.tasks.splice(
+							newSortOrder,
+							0,
+							taskToMove as unknown as Task & {
+								assignee: {
+									id: string;
+									name: string | null;
+									email: string;
+									image: string | null;
+								} | null;
+							},
+						);
 					}
 				}
 
 				return newColumns;
 			});
+			// Invalidate cache
+			if (boardCacheRef.current?.boardId === boardId) {
+				boardCacheRef.current = null;
+			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to move task.');
 			throw err;
@@ -276,6 +355,10 @@ export function useBoard(boardId: string) {
 
 			const newColumn = await response.json();
 			setColumns((prev) => [...prev, { ...newColumn, tasks: [] }]);
+			// Invalidate cache
+			if (boardCacheRef.current?.boardId === boardId) {
+				boardCacheRef.current = null;
+			}
 			return newColumn;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to create column.');
@@ -299,6 +382,10 @@ export function useBoard(boardId: string) {
 					col.id === columnId ? { ...col, ...updatedColumn } : col,
 				),
 			);
+			// Invalidate cache
+			if (boardCacheRef.current?.boardId === boardId) {
+				boardCacheRef.current = null;
+			}
 			return updatedColumn;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to update column.');
@@ -325,6 +412,10 @@ export function useBoard(boardId: string) {
 					),
 				})),
 			);
+			// Invalidate cache
+			if (boardCacheRef.current?.boardId === boardId) {
+				boardCacheRef.current = null;
+			}
 			return updatedTask;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to update task.');

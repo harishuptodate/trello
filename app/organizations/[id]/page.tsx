@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -55,20 +55,7 @@ export default function OrganizationPage() {
 	const [addingMember, setAddingMember] = useState(false);
 	const [removingMember, setRemovingMember] = useState<string | null>(null);
 
-	useEffect(() => {
-		if (session?.user && orgId) {
-			loadOrganization();
-		}
-	}, [session, orgId]);
-
-	useEffect(() => {
-		if (organization && session?.user?.id) {
-			const userMember = members.find((m: any) => m.userId === session.user.id);
-			setIsAdmin(userMember?.role === 'ADMIN' || false);
-		}
-	}, [organization, members, session]);
-
-	async function loadOrganization() {
+	const loadOrganization = useCallback(async () => {
 		try {
 			setLoading(true);
 			const [orgResponse, membersResponse] = await Promise.all([
@@ -97,7 +84,20 @@ export default function OrganizationPage() {
 		} finally {
 			setLoading(false);
 		}
-	}
+	}, [orgId, session?.user?.id]);
+
+	useEffect(() => {
+		if (session?.user && orgId) {
+			loadOrganization();
+		}
+	}, [session, orgId, loadOrganization]);
+
+	useEffect(() => {
+		if (organization && session?.user?.id) {
+			const userMember = members.find((m: any) => m.userId === session.user.id);
+			setIsAdmin(userMember?.role === 'ADMIN' || false);
+		}
+	}, [organization, members, session]);
 
 	useEffect(() => {
 		if (organization && session?.user?.id) {
@@ -108,31 +108,34 @@ export default function OrganizationPage() {
 		}
 	}, [organization, session]);
 
-	async function searchUsers(query: string) {
-		if (query.length < 2) {
-			setSearchResults([]);
-			return;
-		}
-
-		setSearching(true);
-		try {
-			const response = await fetch(
-				`/api/users/search?q=${encodeURIComponent(query)}`,
-			);
-			if (response.ok) {
-				const data = await response.json();
-				// Filter out users who are already members
-				const memberUserIds = new Set(members.map((m: any) => m.userId));
-				setSearchResults(
-					data.users.filter((user: any) => !memberUserIds.has(user.id)),
-				);
+	const searchUsers = useCallback(
+		async (query: string) => {
+			if (query.length < 2) {
+				setSearchResults([]);
+				return;
 			}
-		} catch (err) {
-			console.error('Failed to search users:', err);
-		} finally {
-			setSearching(false);
-		}
-	}
+
+			setSearching(true);
+			try {
+				const response = await fetch(
+					`/api/users/search?q=${encodeURIComponent(query)}`,
+				);
+				if (response.ok) {
+					const data = await response.json();
+					// Filter out users who are already members
+					const memberUserIds = new Set(members.map((m: any) => m.userId));
+					setSearchResults(
+						data.users.filter((user: any) => !memberUserIds.has(user.id)),
+					);
+				}
+			} catch (err) {
+				console.error('Failed to search users:', err);
+			} finally {
+				setSearching(false);
+			}
+		},
+		[members],
+	);
 
 	useEffect(() => {
 		const timeoutId = setTimeout(() => {
@@ -144,71 +147,74 @@ export default function OrganizationPage() {
 		}, 300);
 
 		return () => clearTimeout(timeoutId);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [searchQuery]);
+	}, [searchQuery, searchUsers]);
 
-	async function handleAddMember(
-		userId: string,
-		role: 'ADMIN' | 'MEMBER' = 'MEMBER',
-	) {
-		setError('');
-		setAddingMember(true);
+	const handleAddMember = useCallback(
+		async (userId: string, role: 'ADMIN' | 'MEMBER' = 'MEMBER') => {
+			setError('');
+			setAddingMember(true);
 
-		try {
-			const user = searchResults.find((u) => u.id === userId);
-			if (!user) {
-				setError('User not found');
-				return;
-			}
+			try {
+				const user = searchResults.find((u) => u.id === userId);
+				if (!user) {
+					setError('User not found');
+					return;
+				}
 
-			const response = await fetch(`/api/organizations/${orgId}/members`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ email: user.email, role }),
-			});
+				const response = await fetch(`/api/organizations/${orgId}/members`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ email: user.email, role }),
+				});
 
-			const data = await response.json();
-
-			if (!response.ok) {
-				setError(data.error || 'Failed to add member');
-				return;
-			}
-
-			await loadOrganization();
-			setSearchQuery('');
-			setSearchResults([]);
-		} catch (err) {
-			setError('An error occurred. Please try again.');
-		} finally {
-			setAddingMember(false);
-		}
-	}
-
-	async function handleRemoveMember(userId: string) {
-		if (!confirm('Are you sure you want to remove this member?')) return;
-
-		setRemovingMember(userId);
-		try {
-			const response = await fetch(
-				`/api/organizations/${orgId}/members?userId=${userId}`,
-				{
-					method: 'DELETE',
-				},
-			);
-
-			if (!response.ok) {
 				const data = await response.json();
-				alert(data.error || 'Failed to remove member');
-				return;
-			}
 
-			await loadOrganization();
-		} catch (err) {
-			alert('An error occurred. Please try again.');
-		} finally {
-			setRemovingMember(null);
-		}
-	}
+				if (!response.ok) {
+					setError(data.error || 'Failed to add member');
+					return;
+				}
+
+				await loadOrganization();
+				setSearchQuery('');
+				setSearchResults([]);
+			} catch (err) {
+				setError('An error occurred. Please try again.');
+			} finally {
+				setAddingMember(false);
+				setIsAddMemberDialogOpen(false);
+			}
+		},
+		[orgId, searchResults, loadOrganization],
+	);
+
+	const handleRemoveMember = useCallback(
+		async (userId: string) => {
+			if (!confirm('Are you sure you want to remove this member?')) return;
+
+			setRemovingMember(userId);
+			try {
+				const response = await fetch(
+					`/api/organizations/${orgId}/members?userId=${userId}`,
+					{
+						method: 'DELETE',
+					},
+				);
+
+				if (!response.ok) {
+					const data = await response.json();
+					alert(data.error || 'Failed to remove member');
+					return;
+				}
+
+				await loadOrganization();
+			} catch (err) {
+				alert('An error occurred. Please try again.');
+			} finally {
+				setRemovingMember(null);
+			}
+		},
+		[orgId, loadOrganization],
+	);
 
 	if (loading) {
 		return (
@@ -216,7 +222,7 @@ export default function OrganizationPage() {
 				<div className="text-center">
 					<Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-4" />
 					<p className="text-lg font-medium text-gray-900">
-						Loading organization...
+						Loading Organization...
 					</p>
 				</div>
 			</div>
@@ -244,7 +250,7 @@ export default function OrganizationPage() {
 			<main className="w-full px-4 sm:px-6 lg:px-8 py-8">
 				<div className="max-w-4xl mx-auto">
 					<Link href="/organizations">
-						<Button variant="ghost" className="mb-4">
+						<Button variant="ghost" className="mb-4 cursor-pointer">
 							<ArrowLeft className="h-4 w-4 mr-2" />
 							Back to Organizations
 						</Button>
@@ -276,11 +282,19 @@ export default function OrganizationPage() {
 							<div className="flex items-center gap-6 text-sm text-gray-600">
 								<div className="flex items-center gap-2">
 									<Users className="h-4 w-4" />
-									<span>{members.length} members</span>
+									<span>
+										{members.length === 1
+											? '1 member'
+											: `${members.length || 0} members`}
+									</span>
 								</div>
 								<div className="flex items-center gap-2">
 									<LayoutGrid className="h-4 w-4" />
-									<span>{organization._count?.boards || 0} boards</span>
+									<span>
+										{organization._count?.boards === 1
+											? '1 board'
+											: `${organization._count?.boards || 0} boards`}
+									</span>
 								</div>
 							</div>
 						</CardContent>
@@ -289,7 +303,9 @@ export default function OrganizationPage() {
 					<div className="flex items-center justify-between mb-4">
 						<h2 className="text-xl font-bold text-gray-900">Members</h2>
 						{isAdmin && (
-							<Button onClick={() => setIsAddMemberDialogOpen(true)}>
+							<Button
+								className="cursor-pointer"
+								onClick={() => setIsAddMemberDialogOpen(true)}>
 								<UserPlus className="h-4 w-4 mr-2" />
 								Add Member
 							</Button>
@@ -340,7 +356,7 @@ export default function OrganizationPage() {
 														size="sm"
 														onClick={() => handleRemoveMember(member.userId)}
 														disabled={removingMember === member.userId}
-														className="text-red-600 hover:text-red-700">
+														className="text-red-600 hover:text-red-700 cursor-pointer">
 														{removingMember === member.userId ? (
 															<Loader2 className="h-4 w-4 animate-spin" />
 														) : (

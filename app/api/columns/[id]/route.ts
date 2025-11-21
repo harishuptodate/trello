@@ -6,12 +6,13 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
+		const { id } = await params;
 		const column = await prisma.column.findUnique({
-			where: { id: params.id },
+			where: { id: id },
 			include: {
 				board: true,
 			},
@@ -35,15 +36,16 @@ export async function GET(
 
 export async function PUT(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
+		const { id } = await params;
 		const body = await request.json();
 
 		// Get column to find board
 		const column = await prisma.column.findUnique({
-			where: { id: params.id },
+			where: { id: id },
 			include: {
 				board: true,
 			},
@@ -59,7 +61,7 @@ export async function PUT(
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
-		const updatedColumn = await columnService.updateColumn(params.id, body);
+		const updatedColumn = await columnService.updateColumn(id, body);
 		return NextResponse.json(updatedColumn);
 	} catch (error) {
 		return NextResponse.json(
@@ -71,14 +73,14 @@ export async function PUT(
 
 export async function DELETE(
 	request: NextRequest,
-	{ params }: { params: { id: string } },
+	{ params }: { params: Promise<{ id: string }> },
 ) {
 	try {
 		const user = await requireAuth();
-
+		const { id } = await params;
 		// Get column to find board
 		const column = await prisma.column.findUnique({
-			where: { id: params.id },
+			where: { id: id },
 			include: {
 				board: true,
 			},
@@ -94,7 +96,7 @@ export async function DELETE(
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
-		await columnService.deleteColumn(params.id);
+		await columnService.deleteColumn(id);
 		return NextResponse.json({ success: true });
 	} catch (error) {
 		return NextResponse.json(

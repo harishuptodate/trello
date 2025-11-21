@@ -125,7 +125,7 @@ export default function OrganizationsPage() {
 				<div className="text-center">
 					<Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-4" />
 					<p className="text-lg font-medium text-gray-900">
-						Loading organizations...
+						Loading Organizations...
 					</p>
 				</div>
 			</div>
@@ -146,7 +146,7 @@ export default function OrganizationsPage() {
 								Manage your organizations and teams
 							</p>
 						</div>
-						<Button onClick={() => setIsCreateDialogOpen(true)}>
+						<Button className="cursor-pointer" onClick={() => setIsCreateDialogOpen(true)}>
 							<Plus className="h-4 w-4 mr-2" />
 							Create Organization
 						</Button>
@@ -193,9 +193,6 @@ export default function OrganizationsPage() {
 														</Badge>
 													)}
 												</div>
-												<CardDescription>
-													{orgMember.organization.slug}
-												</CardDescription>
 											</CardHeader>
 											<CardContent>
 												<div className="flex items-center justify-between text-sm text-gray-600">
@@ -203,15 +200,13 @@ export default function OrganizationsPage() {
 														<div className="flex items-center gap-1">
 															<Users className="h-4 w-4" />
 															<span>
-																{orgMember.organization._count?.members || 0}{' '}
-																members
+																{orgMember.organization._count?.members === 1 ? '1 member' : `${orgMember.organization._count?.members} members`}
 															</span>
 														</div>
 														<div className="flex items-center gap-1">
 															<LayoutGrid className="h-4 w-4" />
 															<span>
-																{orgMember.organization._count?.boards || 0}{' '}
-																boards
+																{orgMember.organization._count?.boards === 1 ? '1 board' : `${orgMember.organization._count?.boards} boards`}
 															</span>
 														</div>
 													</div>
