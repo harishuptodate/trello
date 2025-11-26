@@ -28,6 +28,7 @@ import {
 	LayoutGrid,
 	Crown,
 	Loader2,
+	ArrowLeft,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useOrganization } from '@/lib/organization-context';
@@ -220,6 +221,14 @@ export default function OrganizationsPage() {
 					)}
 				</div>
 			</main>
+			<div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50">
+				<Link href="/dashboard">
+					<Button className="cursor-pointer shadow-lg">
+						<ArrowLeft className="h-4 w-4 mr-2" />
+						Back to Dashboard
+					</Button>
+				</Link>
+			</div>
 
 			<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
 				<DialogContent>

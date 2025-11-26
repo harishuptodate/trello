@@ -91,7 +91,7 @@ export default function Navbar({
 						{/* Center: Search Bar + Create Button */}
 						<div className="flex items-center gap-2 sm:gap-3 flex-1 justify-center max-w-2xl">
 							<Link href="/organizations">
-								<Button variant="ghost" size="sm" className="h-8">
+								<Button variant="ghost" size="sm" className="h-8 cursor-pointer border-gray-200 border rounded-md">
 									<Building2 className="h-4 w-4 mr-2" />
 									<span className="hidden cursor-pointer sm:inline">Organizations</span>
 								</Button>

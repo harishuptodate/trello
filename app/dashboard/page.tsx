@@ -269,8 +269,10 @@ export default function DashboardPage() {
 					setFilters((prev) => ({ ...prev, search: value }))
 				}
 				onCreateBoardClick={() => {
-					if (isAdmin && selectedOrgId) {
+					if (isAdmin && selectedOrgId) { // what if selectedOrgId is null? meaning 
 						setIsCreateDialogOpen(true);
+					}else{
+						alert('You are not authorized to create a board');
 					}
 				}}
 				organizations={organizations}
