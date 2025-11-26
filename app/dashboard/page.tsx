@@ -219,8 +219,8 @@ export default function DashboardPage() {
 
 	if (orgLoading || (loading && selectedOrgId)) {
 		return (
-			<div className="flex items-center justify-center h-screen gap-2">
-				<Loader2 className="animate-spin h-10 w-10 text-blue-600" />
+			<div className="flex gap-2 justify-center items-center h-screen">
+				<Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
 				<span className="text-lg font-medium text-gray-900">
 					Loading your boards...
 				</span>
@@ -230,12 +230,12 @@ export default function DashboardPage() {
 
 	if (!selectedOrgId && organizations.length === 0 && !orgLoading) {
 		return (
-			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+			<div className="flex justify-center items-center min-h-screen bg-gray-50">
 				<div className="text-center">
-					<p className="text-lg font-medium text-gray-900 mb-4">
+					<p className="mb-4 text-lg font-medium text-gray-900">
 						No organizations found
 					</p>
-					<p className="text-sm text-gray-600 mb-4">
+					<p className="mb-4 text-sm text-gray-600">
 						Please create an organization to get started
 					</p>
 					<Button onClick={() => (window.location.href = '/organizations')}>
@@ -248,9 +248,9 @@ export default function DashboardPage() {
 
 	if (!selectedOrgId && !orgLoading) {
 		return (
-			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+			<div className="flex justify-center items-center min-h-screen bg-gray-50">
 				<div className="text-center">
-					<p className="text-lg font-medium text-gray-900 mb-4">
+					<p className="mb-4 text-lg font-medium text-gray-900">
 						Please select an organization
 					</p>
 					<Button onClick={() => (window.location.href = '/organizations')}>
@@ -281,9 +281,9 @@ export default function DashboardPage() {
 					setSelectedOrgId(orgId);
 				}}
 			/>
-			<main className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+			<main className="px-4 py-4 w-full sm:px-6 lg:px-8 sm:py-6">
 				<div className="mb-4 sm:mb-6">
-					<h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+					<h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
 						Welcome back,{' '}
 						{session?.user?.name ||
 							session?.user?.email?.split('@')[0] ||
@@ -296,36 +296,36 @@ export default function DashboardPage() {
 				</div>
 
 				{/* Stats*/}
-				{/* <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+				{/* <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-4 sm:gap-6 sm:mb-8">
 					<Card>
 						<CardContent className="p-4 sm:p-6">
-							<div className="flex items-center justify-between">
+							<div className="flex justify-between items-center">
 								<div>
-									<p className="text-xs sm:text-sm font-medium text-gray-600">
+									<p className="text-xs font-medium text-gray-600 sm:text-sm">
 										Total Boards
 									</p>
-									<p className="text-xl sm:text-2xl font-bold text-gray-900">
+									<p className="text-xl font-bold text-gray-900 sm:text-2xl">
 										{boards.length}
 									</p>
 								</div>
-								<div className="h-10 w-10 sm:w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-									<Trello className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+								<div className="flex justify-center items-center w-10 h-10 bg-blue-100 rounded-lg sm:w-12">
+									<Trello className="w-5 h-5 text-blue-600 sm:h-6 sm:w-6" />
 								</div>
 							</div>
 						</CardContent>
 					</Card>
 					<Card>
 						<CardContent className="p-4 sm:p-6">
-							<div className="flex items-center justify-between">
+							<div className="flex justify-between items-center">
 								<div>
-									<p className="text-xs sm:text-sm font-medium text-gray-600">
+									<p className="text-xs font-medium text-gray-600 sm:text-sm">
 										Active Projects
 									</p>
-									<p className="text-xl sm:text-2xl font-bold text-gray-900">
+									<p className="text-xl font-bold text-gray-900 sm:text-2xl">
 										{boards.length}
 									</p>
 								</div>
-								<div className="h-10 w-10 sm:w-12 bg-green-100 rounded-lg flex items-center justify-center">
+								<div className="flex justify-center items-center w-10 h-10 bg-green-100 rounded-lg sm:w-12">
 									<Rocket />
 								</div>
 							</div>
@@ -333,12 +333,12 @@ export default function DashboardPage() {
 					</Card>
 					<Card>
 						<CardContent className="p-4 sm:p-6">
-							<div className="flex items-center justify-between">
+							<div className="flex justify-between items-center">
 								<div>
-									<p className="text-xs sm:text-sm font-medium text-gray-600">
+									<p className="text-xs font-medium text-gray-600 sm:text-sm">
 										Recent Activity
 									</p>
-									<p className="text-xl sm:text-2xl font-bold text-gray-900">
+									<p className="text-xl font-bold text-gray-900 sm:text-2xl">
 										{
 											boards.filter((board) => {
 												if (!board || !board.updatedAt) return false;
@@ -350,25 +350,25 @@ export default function DashboardPage() {
 										}
 									</p>
 								</div>
-								<div className="h-10 w-10 sm:w-12 bg-purple-200 rounded-lg flex items-center justify-center">
-									<div className="text-xl sm:text-2xl ">📊</div>
+								<div className="flex justify-center items-center w-10 h-10 bg-purple-200 rounded-lg sm:w-12">
+									<div className="text-xl sm:text-2xl">📊</div>
 								</div>
 							</div>
 						</CardContent>
 					</Card>
 					<Card>
 						<CardContent className="p-4 sm:p-6">
-							<div className="flex items-center justify-between">
+							<div className="flex justify-between items-center">
 								<div>
-									<p className="text-xs sm:text-sm font-medium text-gray-600">
+									<p className="text-xs font-medium text-gray-600 sm:text-sm">
 										Total Boards
 									</p>
-									<p className="text-xl sm:text-2xl font-bold text-gray-900">
+									<p className="text-xl font-bold text-gray-900 sm:text-2xl">
 										{boards.length}
 									</p>
 								</div>
-								<div className="h-10 w-10 sm:w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-									<Trello className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+								<div className="flex justify-center items-center w-10 h-10 bg-blue-100 rounded-lg sm:w-12">
+									<Trello className="w-5 h-5 text-blue-600 sm:h-6 sm:w-6" />
 								</div>
 							</div>
 						</CardContent>
@@ -376,18 +376,18 @@ export default function DashboardPage() {
 				</div> */}
 				{/* Boards */}
 				<div className="mb-4 sm:mb-6">
-					<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-4">
+					<div className="flex flex-col gap-4 mb-4 sm:flex-row sm:items-center sm:justify-between sm:mb-6">
 						<div>
-							<h2 className="text-lg sm:text-xl font-bold text-gray-900">
+							<h2 className="text-lg font-bold text-gray-900 sm:text-xl">
 								Your Boards
 							</h2>
 							<p className="text-sm text-gray-600">
 								Manage your projects and tasks
 							</p>
 						</div>
-						<div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
+						<div className="flex flex-col gap-2 items-stretch sm:flex-row sm:items-center sm:gap-4">
 							{/* View Toggle */}
-							<div className="flex items-center space-x-2 rounded bg-white border p-1">
+							<div className="flex items-center p-1 space-x-2 bg-white rounded border">
 								<Button
 									variant={viewMode === 'grid' ? 'default' : 'ghost'}
 									size={'sm'}
@@ -417,15 +417,15 @@ export default function DashboardPage() {
 					{boards.length === 0 ? (
 						<div className="text-sm text-gray-500">No boards yet</div>
 					) : viewMode === 'grid' ? (
-						<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
+						<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 sm:gap-4">
 							{filteredBoards.map((board, key) => (
 								<div key={key} className="relative">
 									<Link href={`/boards/${board.id}`}>
-										<Card className="hover:shadow-lg transition-shadow cursor-pointer group">
+										<Card className="transition-shadow cursor-pointer hover:shadow-lg group">
 											<CardHeader className="pb-3">
-												<div className="flex items-center justify-between">
+												<div className="flex justify-between items-center">
 													<div className={`w-4 h-4 ${board.color} rounded`} />
-													<div className="flex items-center gap-2">
+													<div className="flex gap-2 items-center">
 														{new Date(board.createdAt) >
 														new Date(Date.now() - 1000 * 60 * 60 * 24 * 7) ? (
 															<Badge className="text-xs" variant="secondary">
@@ -436,7 +436,7 @@ export default function DashboardPage() {
 															<Button
 																variant="ghost"
 																size="sm"
-																className="h-7 w-7 shrink-0 p-0"
+																className="p-0 w-7 h-7 shrink-0"
 																onClick={(e) => {
 																	e.preventDefault();
 																	e.stopPropagation();
@@ -449,19 +449,19 @@ export default function DashboardPage() {
 																<MoreHorizontal />
 															</Button>
 															{openDropdownId === board.id && (
-																<div className="absolute right-0 top-8 z-50 w-40 bg-white border rounded-md shadow-lg">
+																<div className="absolute right-0 top-8 z-50 w-40 bg-white rounded-md border shadow-lg">
 																	<button
-																		className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+																		className="flex gap-2 items-center px-4 py-2 w-full text-sm text-left hover:bg-gray-100"
 																		onClick={(e) => handleEditBoard(board, e)}>
-																		<Edit className="h-4 w-4" />
+																		<Edit className="w-4 h-4" />
 																		Edit
 																	</button>
 																	<button
-																		className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 text-red-600"
+																		className="flex gap-2 items-center px-4 py-2 w-full text-sm text-left text-red-600 hover:bg-gray-100"
 																		onClick={(e) =>
 																			handleDeleteBoard(board, e)
 																		}>
-																		<Trash2 className="h-4 w-4" />
+																		<Trash2 className="w-4 h-4" />
 																		Delete
 																	</button>
 																</div>
@@ -471,13 +471,13 @@ export default function DashboardPage() {
 												</div>
 											</CardHeader>
 											<CardContent className="p-4 sm:p-6">
-												<CardTitle className="text-base sm:text-lg mb-2 group-hover:text-blue-600 transition-colors">
+												<CardTitle className="mb-2 text-base transition-colors sm:text-lg group-hover:text-blue-600">
 													{board.title}
 												</CardTitle>
-												<CardDescription className="text-sm mb-4">
+												<CardDescription className="mb-4 text-sm">
 													{board.description}
 												</CardDescription>
-												<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500 space-y-1 sm:space-y-0">
+												<div className="flex flex-col space-y-1 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
 													<span>
 														Created{' '}
 														{new Date(board.createdAt).toLocaleDateString()}
@@ -497,10 +497,10 @@ export default function DashboardPage() {
 									onClick={() => {
 										setIsCreateDialogOpen(true);
 									}}
-									className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
-									<CardContent className="p-3 sm:p-6 flex flex-col items-center justify-center h-full">
-										<Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
-										<p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">
+									className="border-2 border-gray-300 border-dashed transition-colors cursor-pointer hover:border-blue-400 group">
+									<CardContent className="flex flex-col justify-center items-center p-3 h-full sm:p-6">
+										<Plus className="mb-2 w-6 h-6 text-gray-400 sm:h-8 sm:w-8 group-hover:text-blue-600" />
+										<p className="text-sm font-medium text-gray-600 sm:text-base group-hover:text-blue-600">
 											Create new board
 										</p>
 									</CardContent>
@@ -513,11 +513,11 @@ export default function DashboardPage() {
 								<div key={key} className={key > 0 ? 'mt-4' : ''}>
 									<div className="relative">
 										<Link href={`/boards/${board.id}`}>
-											<Card className="hover:shadow-lg transition-shadow cursor-pointer group">
+											<Card className="transition-shadow cursor-pointer hover:shadow-lg group">
 												<CardHeader className="pb-3">
-													<div className="flex items-center justify-between">
+													<div className="flex justify-between items-center">
 														<div className={`w-4 h-4 ${board.color} rounded`} />
-														<div className="flex items-center gap-2">
+														<div className="flex gap-2 items-center">
 															{new Date(board.createdAt) >
 															new Date(Date.now() - 1000 * 60 * 60 * 24 * 7) ? (
 																<Badge className="text-xs" variant="secondary">
@@ -528,7 +528,7 @@ export default function DashboardPage() {
 																<Button
 																	variant="ghost"
 																	size="sm"
-																	className="h-7 w-7 shrink-0 p-0"
+																	className="p-0 w-7 h-7 shrink-0"
 																	onClick={(e) => {
 																		e.preventDefault();
 																		e.stopPropagation();
@@ -541,21 +541,21 @@ export default function DashboardPage() {
 																	<MoreHorizontal />
 																</Button>
 																{openDropdownId === board.id && (
-																	<div className="absolute right-0 top-8 z-50 w-40 bg-white border rounded-md shadow-lg">
+																	<div className="absolute right-0 top-8 z-50 w-40 bg-white rounded-md border shadow-lg">
 																		<button
-																			className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+																			className="flex gap-2 items-center px-4 py-2 w-full text-sm text-left hover:bg-gray-100"
 																			onClick={(e) =>
 																				handleEditBoard(board, e)
 																			}>
-																			<Edit className="h-4 w-4" />
+																			<Edit className="w-4 h-4" />
 																			Edit
 																		</button>
 																		<button
-																			className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 text-red-600"
+																			className="flex gap-2 items-center px-4 py-2 w-full text-sm text-left text-red-600 hover:bg-gray-100"
 																			onClick={(e) =>
 																				handleDeleteBoard(board, e)
 																			}>
-																			<Trash2 className="h-4 w-4" />
+																			<Trash2 className="w-4 h-4" />
 																			Delete
 																		</button>
 																	</div>
@@ -565,13 +565,13 @@ export default function DashboardPage() {
 													</div>
 												</CardHeader>
 												<CardContent className="p-4 sm:p-6">
-													<CardTitle className="text-base sm:text-lg mb-2 group-hover:text-blue-600 transition-colors">
+													<CardTitle className="mb-2 text-base transition-colors sm:text-lg group-hover:text-blue-600">
 														{board.title}
 													</CardTitle>
-													<CardDescription className="text-sm mb-4">
+													<CardDescription className="mb-4 text-sm">
 														{board.description}
 													</CardDescription>
-													<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500 space-y-1 sm:space-y-0">
+													<div className="flex flex-col space-y-1 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
 														<span>
 															Created{' '}
 															{new Date(board.createdAt).toLocaleDateString()}
@@ -592,10 +592,10 @@ export default function DashboardPage() {
 									onClick={() => {
 										setIsCreateDialogOpen(true);
 									}}
-									className="mt-4 border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group">
+									className="mt-4 border-2 border-gray-300 border-dashed transition-colors cursor-pointer hover:border-blue-400 group">
 									<CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full min-h-[200px]">
-										<Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
-										<p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">
+										<Plus className="mb-2 w-6 h-6 text-gray-400 sm:h-8 sm:w-8 group-hover:text-blue-600" />
+										<p className="text-sm font-medium text-gray-600 sm:text-base group-hover:text-blue-600">
 											Create new board
 										</p>
 									</CardContent>
@@ -612,7 +612,7 @@ export default function DashboardPage() {
 						<p>Filter boards by title, date, or task count</p>
 					</DialogHeader>
 					<div className="space-y-4">
-						<div className="space-y-2 space-x-2">
+						<div className="space-x-2 space-y-2">
 							<Label className="text-sm">Search</Label>
 							<Input
 								placeholder="Search boards..."
@@ -623,7 +623,7 @@ export default function DashboardPage() {
 							/>
 						</div>
 						<div className="space-y-2">
-							<div className="grid grid-cols-1 sm:grid-cols-2  items-center  justify-between space-x-2">
+							<div className="grid grid-cols-1 justify-between items-center space-x-2 sm:grid-cols-2">
 								<div className="space-y-1">
 									<Label className="text-xs">Start Date</Label>
 									<Input
@@ -639,7 +639,7 @@ export default function DashboardPage() {
 										}
 									/>
 								</div>
-								<div className="space-y-1 ">
+								<div className="space-y-1">
 									<Label className="text-xs">End Date</Label>
 									<Input
 										type="date"
@@ -658,7 +658,7 @@ export default function DashboardPage() {
 						</div>
 						<div className="space-y-2">
 							<Label className="text-sm">Task Count</Label>
-							<div className="grid grid-cols-1 sm:grid-cols-2 items-center justify-between space-x-2">
+							<div className="grid grid-cols-1 justify-between items-center space-x-2 sm:grid-cols-2">
 								<div className="space-y-1">
 									<Label className="text-xs">Minimum</Label>
 									<Input
@@ -695,7 +695,7 @@ export default function DashboardPage() {
 								</div>
 							</div>
 						</div>
-						<div className="flex flex-col sm:flex-row pt-4 space-y-2 sm:space-y-0 justify-between sm:space-x-2">
+						<div className="flex flex-col justify-between pt-4 space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
 							<Button variant="outline" onClick={clearFilters}>
 								Clear Filters
 							</Button>
@@ -728,7 +728,7 @@ export default function DashboardPage() {
 
 						<div className="space-y-2">
 							<Label>Board Color</Label>
-							<div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+							<div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
 								{[
 									'bg-blue-500',
 									'bg-green-500',
@@ -773,7 +773,7 @@ export default function DashboardPage() {
 								disabled={updatingBoard}>
 								{updatingBoard ? (
 									<>
-										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										<Loader2 className="mr-2 w-4 h-4 animate-spin" />
 										Updating...
 									</>
 								) : (
@@ -794,7 +794,7 @@ export default function DashboardPage() {
 							action cannot be undone.
 						</p>
 					</DialogHeader>
-					<div className="flex justify-end space-x-2 pt-4">
+					<div className="flex justify-end pt-4 space-x-2">
 						<Button
 							type="button"
 							variant="outline"
@@ -811,7 +811,7 @@ export default function DashboardPage() {
 							disabled={!!deletingBoardId}>
 							{deletingBoardId ? (
 								<>
-									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+									<Loader2 className="mr-2 w-4 h-4 animate-spin" />
 									Deleting...
 								</>
 							) : (
@@ -848,7 +848,7 @@ export default function DashboardPage() {
 								id="createDefaultColumns"
 								checked={createDefaultColumns}
 								onChange={(e) => setCreateDefaultColumns(e.target.checked)}
-								className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+								className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
 							/>
 							<Label
 								htmlFor="createDefaultColumns"
@@ -874,7 +874,7 @@ export default function DashboardPage() {
 								disabled={creatingBoard}>
 								{creatingBoard ? (
 									<>
-										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										<Loader2 className="mr-2 w-4 h-4 animate-spin" />
 										Creating...
 									</>
 								) : (
