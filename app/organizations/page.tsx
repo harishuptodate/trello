@@ -32,13 +32,18 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useOrganization } from '@/lib/organization-context';
+import {
+	useOrganizations,
+	useCreateOrganization,
+} from '@/lib/hooks/queries/useOrganizations';
 
 export default function OrganizationsPage() {
 	const { data: session } = useSession();
 	const router = useRouter();
 	const { setSelectedOrgId } = useOrganization();
-	const [organizations, setOrganizations] = useState<any[]>([]);
-	const [loading, setLoading] = useState(true);
+	const { data: organizations = [], isLoading: loading, refetch } =
+		useOrganizations();
+	const createOrganizationMutation = useCreateOrganization();
 	const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 	const [orgName, setOrgName] = useState('');
 	const [orgSlug, setOrgSlug] = useState('');
@@ -47,24 +52,9 @@ export default function OrganizationsPage() {
 
 	useEffect(() => {
 		if (session?.user) {
-			fetchOrganizations();
+			refetch();
 		}
-	}, [session]);
-
-	async function fetchOrganizations() {
-		try {
-			setLoading(true);
-			const response = await fetch('/api/organizations');
-			if (response.ok) {
-				const orgs = await response.json();
-				setOrganizations(orgs);
-			}
-		} catch (err) {
-			console.error('Failed to load organizations:', err);
-		} finally {
-			setLoading(false);
-		}
-	}
+	}, [session, refetch]);
 
 	async function handleCreateOrganization(e: React.FormEvent) {
 		e.preventDefault();
@@ -87,24 +77,11 @@ export default function OrganizationsPage() {
 
 		setCreatingOrg(true);
 		try {
-			const response = await fetch('/api/organizations', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					name: orgName.trim(),
-					slug: orgSlug.trim(),
-				}),
+			await createOrganizationMutation.mutateAsync({
+				name: orgName.trim(),
+				slug: orgSlug.trim(),
 			});
-
-			const data = await response.json();
-
-			if (!response.ok) {
-				setError(data.error || 'Failed to create organization');
-				return;
-			}
-
-			// Refresh organizations list
-			await fetchOrganizations();
+			await refetch();
 			setIsCreateDialogOpen(false);
 			setOrgName('');
 			setOrgSlug('');
@@ -122,9 +99,9 @@ export default function OrganizationsPage() {
 
 	if (loading) {
 		return (
-			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+			<div className="flex justify-center items-center min-h-screen bg-gray-50">
 				<div className="text-center">
-					<Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-4" />
+					<Loader2 className="mx-auto mb-4 w-10 h-10 text-blue-600 animate-spin" />
 					<p className="text-lg font-medium text-gray-900">
 						Loading Organizations...
 					</p>
@@ -136,19 +113,19 @@ export default function OrganizationsPage() {
 	return (
 		<div className="min-h-screen bg-gray-50">
 			<Navbar />
-			<main className="w-full px-4 sm:px-6 lg:px-8 py-8">
-				<div className="max-w-6xl mx-auto">
-					<div className="flex items-center justify-between mb-8">
+			<main className="px-4 py-8 w-full sm:px-6 lg:px-8">
+				<div className="mx-auto max-w-6xl">
+					<div className="flex justify-between items-center mb-8">
 						<div>
-							<h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+							<h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
 								Organizations
 							</h1>
-							<p className="text-sm text-gray-600 mt-1">
+							<p className="mt-1 text-sm text-gray-600">
 								Manage your organizations and teams
 							</p>
 						</div>
 						<Button className="cursor-pointer" onClick={() => setIsCreateDialogOpen(true)}>
-							<Plus className="h-4 w-4 mr-2" />
+							<Plus className="mr-2 w-4 h-4" />
 							Create Organization
 						</Button>
 					</div>
@@ -156,31 +133,31 @@ export default function OrganizationsPage() {
 					{organizations.length === 0 ? (
 						<Card>
 							<CardContent className="p-12 text-center">
-								<Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-								<h3 className="text-lg font-medium text-gray-900 mb-2">
+								<Building2 className="mx-auto mb-4 w-12 h-12 text-gray-400" />
+								<h3 className="mb-2 text-lg font-medium text-gray-900">
 									No organizations yet
 								</h3>
-								<p className="text-sm text-gray-600 mb-4">
+								<p className="mb-4 text-sm text-gray-600">
 									Create your first organization to get started
 								</p>
 								<Button onClick={() => setIsCreateDialogOpen(true)}>
-									<Plus className="h-4 w-4 mr-2" />
+									<Plus className="mr-2 w-4 h-4" />
 									Create Organization
 								</Button>
 							</CardContent>
 						</Card>
 					) : (
-						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-							{organizations.map((orgMember) => (
+						<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+							{organizations.map((orgMember: any) => (
 								<Card
 									key={orgMember.id}
-									className="hover:shadow-lg transition-shadow">
+									className="transition-shadow hover:shadow-lg">
 									<Link href={`/organizations/${orgMember.organization.id}`}>
 										<div className="cursor-pointer">
 											<CardHeader>
-												<div className="flex items-start justify-between">
+												<div className="flex justify-between items-start">
 													<div className="flex items-center space-x-2">
-														<Building2 className="h-5 w-5 text-blue-600" />
+														<Building2 className="w-5 h-5 text-blue-600" />
 														<CardTitle className="text-lg">
 															{orgMember.organization.name}
 														</CardTitle>
@@ -188,24 +165,24 @@ export default function OrganizationsPage() {
 													{orgMember.role === 'ADMIN' && (
 														<Badge
 															variant="secondary"
-															className="flex items-center gap-1">
-															<Crown className="h-3 w-3" />
+															className="flex gap-1 items-center">
+															<Crown className="w-3 h-3" />
 															Admin
 														</Badge>
 													)}
 												</div>
 											</CardHeader>
 											<CardContent>
-												<div className="flex items-center justify-between text-sm text-gray-600">
-													<div className="flex items-center gap-4">
-														<div className="flex items-center gap-1">
-															<Users className="h-4 w-4" />
+												<div className="flex justify-between items-center text-sm text-gray-600">
+													<div className="flex gap-4 items-center">
+														<div className="flex gap-1 items-center">
+															<Users className="w-4 h-4" />
 															<span>
 																{orgMember.organization._count?.members === 1 ? '1 member' : `${orgMember.organization._count?.members} members`}
 															</span>
 														</div>
-														<div className="flex items-center gap-1">
-															<LayoutGrid className="h-4 w-4" />
+														<div className="flex gap-1 items-center">
+															<LayoutGrid className="w-4 h-4" />
 															<span>
 																{orgMember.organization._count?.boards === 1 ? '1 board' : `${orgMember.organization._count?.boards} boards`}
 															</span>
@@ -221,10 +198,10 @@ export default function OrganizationsPage() {
 					)}
 				</div>
 			</main>
-			<div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50">
+			<div className="fixed bottom-8 left-1/2 z-50 transform -translate-x-1/2">
 				<Link href="/dashboard">
-					<Button className="cursor-pointer shadow-lg">
-						<ArrowLeft className="h-4 w-4 mr-2" />
+					<Button className="shadow-lg cursor-pointer">
+						<ArrowLeft className="mr-2 w-4 h-4" />
 						Back to Dashboard
 					</Button>
 				</Link>
@@ -237,7 +214,7 @@ export default function OrganizationsPage() {
 					</DialogHeader>
 					<form onSubmit={handleCreateOrganization} className="space-y-4">
 						{error && (
-							<div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
+							<div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">
 								{error}
 							</div>
 						)}
@@ -288,7 +265,7 @@ export default function OrganizationsPage() {
 							<Button type="submit" disabled={creatingOrg}>
 								{creatingOrg ? (
 									<>
-										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										<Loader2 className="mr-2 w-4 h-4 animate-spin" />
 										Creating...
 									</>
 								) : (

@@ -7,28 +7,25 @@ import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { useBoard } from '@/lib/hooks/useBoards';
 import type { Task, Column, TaskPriority } from '@prisma/client';
-import type { ColumnWithTasks } from '@/lib/services';
+import type { ColumnWithTasks, TaskWithAssignees } from '@/lib/services';
+import {
+	TaskDialog,
+	TaskDialogData,
+	TaskDialogTask,
+	ChecklistItem,
+} from '@/components/task-dialog';
 import { DialogTitle, DialogTrigger } from '@radix-ui/react-dialog';
 import {
 	Calendar,
 	MoreHorizontal,
 	Plus,
 	User as UserIcon,
-	Check,
-	X,
-	Trash2,
 	Pencil,
 	Loader2,
+	Check,
+	User,
 } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
@@ -42,7 +39,6 @@ import {
 	useDroppable,
 	useSensor,
 	PointerSensor,
-	KeyboardSensor,
 	useSensors,
 } from '@dnd-kit/core';
 import {
@@ -51,377 +47,29 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useSortable } from '@dnd-kit/sortable';
+import { InlineEdit } from '@/components/ui/inline-edit';
 
-export type ChecklistItem = {
-	item: string;
-	completed: boolean;
-};
-
-export type TaskData = {
-	title: string;
-	description?: string;
-	assigneeId?: string;
-	dueDate?: string;
-	priority: 'low' | 'medium' | 'high';
-	checklist?: ChecklistItem[];
-};
-
-type OrganizationMemberWithUser = {
-	id: string;
-	userId: string;
-	role: 'ADMIN' | 'MEMBER';
-	user: {
-		id: string;
-		name: string | null;
-		email: string;
-		image: string | null;
-	};
-};
+export type TaskData = TaskDialogData;
 
 type TaskFormProps = {
 	columnId: string;
 	boardId: string;
-	task?:
-		| (Task & {
-				assignee: {
-					id: string;
-					name: string | null;
-					email: string;
-					image: string | null;
-				} | null;
-		  })
-		| null;
+	task?: TaskDialogTask | null;
 	onCreateTask?: (columnId: string, taskData: TaskData) => Promise<void>;
 	onUpdateTask?: (taskId: string, taskData: TaskData) => Promise<void>;
 	onClose: () => void;
 };
-// dialog is not closing after creating the task fix it, but when updating the task, the dialog is closing.
-// fix is :
-function TaskForm({
-	columnId,
-	boardId,
-	task,
-	onCreateTask,
-	onUpdateTask,
-	onClose,
-}: TaskFormProps) {
-	const [orgMembers, setOrgMembers] = useState<OrganizationMemberWithUser[]>(
-		[],
-	);
-	const [loadingMembers, setLoadingMembers] = useState(false);
-	const [submitting, setSubmitting] = useState(false);
 
-	const loadOrgMembers = useCallback(async () => {
-		try {
-			setLoadingMembers(true);
-			let organizationId: string | null = null;
-
-			if (boardId) {
-				// Direct board ID
-				const boardResponse = await fetch(`/api/boards/${boardId}`);
-				if (boardResponse.ok) {
-					const board = await boardResponse.json();
-					organizationId = board.organizationId;
-				}
-			} else if (columnId) {
-				// Get board ID from column
-				const response = await fetch(`/api/columns/${columnId}`);
-				if (response.ok) {
-					const column = await response.json();
-					const boardResponse = await fetch(`/api/boards/${column.boardId}`);
-					if (boardResponse.ok) {
-						const board = await boardResponse.json();
-						organizationId = board.organizationId;
-					}
-				}
-			}
-
-			if (organizationId) {
-				const membersResponse = await fetch(
-					`/api/organizations/${organizationId}/members/list`,
-				);
-				if (membersResponse.ok) {
-					const members = await membersResponse.json();
-					setOrgMembers(members);
-				}
-			}
-		} catch (err) {
-			console.error('Failed to load org members:', err);
-		} finally {
-			setLoadingMembers(false);
-		}
-	}, [boardId, columnId]);
-
-	useEffect(() => {
-		if (boardId || columnId) {
-			loadOrgMembers();
-		}
-	}, [boardId, columnId, loadOrgMembers]);
-
-	const isEditMode = !!(task && task.id && task.id.trim() !== '');
-	const [title, setTitle] = useState(task?.title || '');
-	const [description, setDescription] = useState(task?.description || '');
-	const [assigneeId, setAssigneeId] = useState(task?.assigneeId || 'none');
-	const [dueDate, setDueDate] = useState(
-		task?.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
-	);
-	const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(
-		(task?.priority?.toLowerCase() as 'low' | 'medium' | 'high') || 'medium',
-	);
-	const [checklist, setChecklist] = useState<ChecklistItem[]>(
-		(task?.checklist as ChecklistItem[]) || [],
-	);
-
-	// Calculate checklist progress - memoized
-	const { completedCount, totalCount, progressPercentage, isComplete } =
-		useMemo(() => {
-			const completed = checklist.filter((item) => item.completed).length;
-			const total = checklist.length;
-			const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-			const complete = total > 0 && completed === total;
-			return {
-				completedCount: completed,
-				totalCount: total,
-				progressPercentage: progress,
-				isComplete: complete,
-			};
-		}, [checklist]);
-
-	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (!title.trim() || submitting) return;
-
-		setSubmitting(true);
-		// Filter out empty checklist items
-		const validChecklist = checklist.filter(
-			(item) => item.item.trim().length > 0,
-		);
-
-		const taskData: TaskData = {
-			title: title.trim(),
-			description: description.trim() || undefined,
-			assigneeId: assigneeId && assigneeId !== 'none' ? assigneeId : undefined,
-			dueDate: dueDate || undefined,
-			priority,
-			checklist: validChecklist.length > 0 ? validChecklist : undefined,
-		};
-
-		try {
-			if (isEditMode && task?.id && onUpdateTask) {
-				await onUpdateTask(task.id, taskData);
-			} else if (!isEditMode && onCreateTask) {
-				await onCreateTask(columnId, taskData);
-			} else {
-				console.error('Missing required handler:', {
-					isEditMode,
-					hasOnUpdateTask: !!onUpdateTask,
-					hasOnCreateTask: !!onCreateTask,
-				});
-				return;
-			}
-			// Close dialog
-			if (onClose) {
-				onClose();
-			} else {
-				const trigger = document.querySelector(
-					'[data-state="open"]',
-				) as HTMLElement;
-				if (trigger) trigger.click();
-			}
-		} catch (error) {
-			console.error('Error saving task:', error);
-		} finally {
-			setSubmitting(false);
-		}
-	};
-
-	const addChecklistItem = useCallback(() => {
-		setChecklist((prev) => [...prev, { item: '', completed: false }]);
-	}, []);
-
-	const updateChecklistItem = useCallback(
-		(index: number, updates: Partial<ChecklistItem>) => {
-			setChecklist((prev) => {
-				const updated = [...prev];
-				updated[index] = { ...updated[index], ...updates };
-				return updated;
-			});
-		},
-		[],
-	);
-
-	const removeChecklistItem = useCallback((index: number) => {
-		setChecklist((prev) => prev.filter((_, i) => i !== index));
-	}, []);
-
+function TaskForm(props: TaskFormProps) {
 	return (
-		<form className="space-y-4" onSubmit={handleSubmit}>
-			<div className="space-y-2">
-				<Label>Title*</Label>
-				<Input
-					id="title"
-					className="selection:bg-gray-500 selection:text-white"
-					autoFocus={true}
-					value={title}
-					onChange={(e) => setTitle(e.target.value)}
-					placeholder="Enter task title..."
-					required
-				/>
-			</div>
-			<div className="space-y-2">
-				<Label>Description</Label>
-				<Textarea
-					id="description"
-					value={description}
-					onChange={(e) => setDescription(e.target.value)}
-					placeholder="Enter task description..."
-					rows={3}
-				/>
-			</div>
-			<div className="flex items-center justify-between gap-2">
-				<div className="space-y-2">
-					<Label className="ml-3.5">Assignee</Label>
-					<Select value={assigneeId} onValueChange={setAssigneeId}>
-						<SelectTrigger>
-							<SelectValue placeholder="Select assignee..." />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="none">None</SelectItem>
-							{orgMembers.length > 0 &&
-								orgMembers.map((member) => {
-									return (
-										<SelectItem key={member.user.id} value={member.user.id}>
-											{member.user.name || member.user.email || 'No assignee'}
-										</SelectItem>
-									);
-								})}
-						</SelectContent>
-					</Select>
-				</div>
-				<div className="space-y-2">
-					<Label className="ml-10.5">Due Date</Label>
-					<Input
-						type="date"
-						id="dueDate"
-						value={dueDate}
-						onChange={(e) => setDueDate(e.target.value)}
-					/>
-				</div>
-				<div className="space-y-2">
-					<Label className="ml-3.5">Priority</Label>
-					<Select
-						value={priority}
-						onValueChange={(value: 'low' | 'medium' | 'high') =>
-							setPriority(value)
-						}>
-						<SelectTrigger>
-							<SelectValue placeholder="Select task priority..." />
-						</SelectTrigger>
-						<SelectContent>
-							{['low', 'medium', 'high'].map((p) => (
-								<SelectItem key={p} value={p}>
-									{p.charAt(0).toUpperCase() + p.slice(1)}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				</div>
-			</div>
-
-			{/* Checklist Section */}
-			<div className="space-y-3">
-				<div className="flex items-center justify-between">
-					<Label>Checklist</Label>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						onClick={addChecklistItem}>
-						<Plus className="w-4 h-4 mr-1" />
-						Add Item
-					</Button>
-				</div>
-
-				{checklist.length > 0 && (
-					<div className="space-y-3">
-						{/* Progress Bar */}
-						<div className="space-y-1">
-							<div className="flex items-center justify-between text-sm">
-								<span className="text-gray-600">
-									{completedCount} of {totalCount} completed
-								</span>
-								{isComplete && (
-									<span className="text-green-600 font-medium flex items-center gap-1">
-										<Check className="w-4 h-4" />
-										100%
-									</span>
-								)}
-							</div>
-							<div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
-								<div
-									className={`h-full transition-all duration-300 ${
-										isComplete ? 'bg-green-500' : 'bg-blue-500'
-									}`}
-									style={{ width: `${progressPercentage}%` }}
-								/>
-							</div>
-						</div>
-
-						{/* Checklist Items */}
-						<div className="space-y-2 max-h-60 overflow-y-auto">
-							{checklist.map((item, index) => (
-								<div key={index} className="flex items-center gap-2">
-									<input
-										type="checkbox"
-										checked={item.completed}
-										onChange={(e) =>
-											updateChecklistItem(index, {
-												completed: e.target.checked,
-											})
-										}
-										className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 flex-shrink-0"
-									/>
-									<Input
-										value={item.item}
-										autoFocus={index === checklist.length - 1} //
-										onChange={(e) =>
-											updateChecklistItem(index, { item: e.target.value })
-										}
-										placeholder="Checklist item..."
-										className={`flex-1  ${
-											item.completed ? 'line-through text-gray-500' : ''
-										}`}
-									/>
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										onClick={() => removeChecklistItem(index)}
-										className="text-red-500 hover:text-red-700 flex-shrink-0">
-										<Trash2 className="w-4 h-4" />
-									</Button>
-								</div>
-							))}
-						</div>
-					</div>
-				)}
-			</div>
-
-			<div className="flex justify-end space-x-2 pt-4">
-				<Button type="submit" disabled={!title.trim() || submitting}>
-					{submitting ? (
-						<>
-							<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-							{isEditMode ? 'Updating...' : 'Creating...'}
-						</>
-					) : isEditMode ? (
-						'Update Task'
-					) : (
-						'Create Task'
-					)}
-				</Button>
-			</div>
-		</form>
+		<TaskDialog
+			columnId={props.columnId}
+			boardId={props.boardId}
+			task={props.task}
+			onCreateTask={props.onCreateTask}
+			onUpdateTask={props.onUpdateTask}
+			onClose={props.onClose}
+		/>
 	);
 }
 
@@ -429,12 +77,14 @@ const DroppableColumn = memo(function DroppableColumn({
 	column,
 	children,
 	onCreateTask,
-	onEditColumn,
+	onInlineSaveColumn,
+	inlineSavingColumnId,
 }: {
 	column: ColumnWithTasks;
 	children: React.ReactNode;
 	onCreateTask: (columnId: string, taskData: any) => Promise<void>;
-	onEditColumn: (column: ColumnWithTasks) => void;
+	onInlineSaveColumn: (columnId: string, title: string) => Promise<void>;
+	inlineSavingColumnId: string | null;
 }) {
 	const { setNodeRef, isOver } = useDroppable({ id: column.id });
 	const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
@@ -540,27 +190,22 @@ const DroppableColumn = memo(function DroppableColumn({
 				}`}
 				style={{ maxHeight: 'calc(100vh - 200px)' }}>
 				{/* Column Header */}
-				<div className="p-3 sm:p-4 border-b flex-shrink-0">
-					<div className="flex items-center justify-between">
-						<div className="flex items-center space-x-2 min-w-0">
-							<h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
-								{column.title}
-							</h3>
-							<Badge variant="secondary" className="text-xs flex-shrink-0">
-								{column.tasks.length}
-							</Badge>
-						</div>
-						<Button
-							variant="ghost"
-							size="sm"
-							className="flex-shrink-0"
-							onClick={() => onEditColumn(column)}>
-							<MoreHorizontal />
-						</Button>
+				<div className="flex-shrink-0 p-3 border-b sm:p-4">
+					<div className="flex items-center justify-between gap-2">
+						<InlineEdit
+							value={column.title}
+							placeholder="Edit column title..."
+							onSave={(val) => onInlineSaveColumn(column.id, val)}
+							saving={inlineSavingColumnId === column.id}
+							className="flex-1 min-w-0"
+						/>
+						<Badge variant="secondary" className="flex-shrink-0 text-xs">
+							{column.tasks.length}
+						</Badge>
 					</div>
 				</div>
 				{/* columns content */}
-				<div className="p-2 flex flex-col flex-1 min-h-0">
+				<div className="flex flex-col flex-1 p-2 min-h-0">
 					<div
 						ref={scrollContainerRef}
 						onMouseDown={handleMouseDown}
@@ -576,12 +221,12 @@ const DroppableColumn = memo(function DroppableColumn({
 						<DialogTrigger asChild>
 							<Button
 								variant="secondary"
-								className="w-full mt-3 text-gray-500 hover:text-gray-700 flex-shrink-0">
+								className="flex-shrink-0 mt-3 w-full text-gray-500 hover:text-gray-700">
 								<Plus />
 								Add Task
 							</Button>
 						</DialogTrigger>
-						<DialogContent>
+						<DialogContent className="max-w-7xl w-[95vw] max-h-[90vh] overflow-y-auto">
 							<DialogHeader>
 								<DialogTitle>Create New Task</DialogTitle>
 								<p className="text-sm text-gray-600">
@@ -607,24 +252,8 @@ const SortableTask = memo(function SortableTask({
 	task,
 	onEditTask,
 }: {
-	task: Task & {
-		assignee: {
-			id: string;
-			name: string | null;
-			email: string;
-			image: string | null;
-		} | null;
-	};
-	onEditTask?: (
-		task: Task & {
-			assignee: {
-				id: string;
-				name: string | null;
-				email: string;
-				image: string | null;
-			} | null;
-		},
-	) => void;
+	task: TaskWithAssignees;
+	onEditTask?: (task: TaskWithAssignees) => void;
 }) {
 	const {
 		attributes,
@@ -655,6 +284,14 @@ const SortableTask = memo(function SortableTask({
 		[],
 	);
 
+	const getInitials = useCallback((name?: string | null, email?: string) => {
+		const source = name || email || '';
+		const parts = source.split(' ').filter(Boolean);
+		if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+		if (source.includes('@')) return source[0].toUpperCase();
+		return source.slice(0, 2).toUpperCase();
+	}, []);
+
 	// Calculate checklist progress - memoized
 	const checklist = (task.checklist as ChecklistItem[]) || [];
 	const { completedCount, totalCount, progressPercentage, isComplete } =
@@ -680,42 +317,52 @@ const SortableTask = memo(function SortableTask({
 			{...listeners}
 			style={styles}
 			data-sortable-id={task.id}>
-			<Card className="cursor-pointer hover:shadow-md transition-shadow">
+			<Card
+				onClick={(e) => {
+					e.stopPropagation();
+					onEditTask?.(task);
+				}}
+				className="transition-shadow cursor-pointer hover:shadow-md">
 				<CardContent className="">
 					<div className="space-y-1 sm:space-y-2">
 						{/* Task Header */}
-						<div className="flex items-start justify-between">
-							<h4 className="font-medium text-gray-900 text-sm leading-tight flex-1 min-w-0 pr-2">
+						<div className="flex justify-between items-center">
+							<h4 className="flex-1 pr-2 min-w-0 text-sm font-medium leading-tight text-gray-900">
 								{task.title}
 							</h4>
-							{onEditTask && (
+							{/* {onEditTask && (
 								<Button
 									variant="ghost"
 									size="sm"
-									className="h-6 w-6 p-0 shrink-0"
+									className="p-0 w-8 h-8 shrink-0 ml-auto"
 									onClick={(e) => {
 										e.stopPropagation();
 										onEditTask(task);
 									}}>
-									<Pencil className="w-3 h-3" />
+									<Pencil className=" size-5" />
 								</Button>
-							)}
+							)} */}
 						</div>
 
 						{/* Task Description */}
-						<p className="text-xs text-gray-600 line-clamp-2">
-							{task.description ?? 'No description'}
-						</p>
+
+						{task.description ? (
+							<p className="text-xs text-gray-600 line-clamp-2">
+								{task.description}
+							</p>
+						) : (
+							''
+						)}
 
 						{/* Checklist Progress */}
 						{totalCount > 0 && (
 							<div className="space-y-1">
-								<div className="flex items-center justify-between text-xs">
+								<div className="flex justify-between items-center text-xs">
 									<span className="text-gray-600">
 										{completedCount} of {totalCount} completed
 									</span>
 									{isComplete && (
-										<span className="text-green-600 font-medium flex items-center gap-1">
+										<span className="flex gap-1 items-center font-medium text-green-600">
 											<Check className="w-3 h-3" />
 										</span>
 									)}
@@ -732,32 +379,37 @@ const SortableTask = memo(function SortableTask({
 						)}
 
 						{/* Task Metadata */}
-						<div className="flex items-center justify-between">
-							<div className="flex items-center space-x-1 sm:space-x-2 min-w-0">
-								{task.assignee && (
-									<div className="flex items-center space-x-1 text-xs text-gray-600 min-w-0">
-										<UserIcon className="w-3 h-3 shrink-0" />
-										<span className="truncate italic">
-											{task.assignee.name ||
-												task.assignee.email ||
-												'No assignee'}
-										</span>
+						<div className="flex justify-between items-center">
+							<div className="flex items-center space-x-1 min-w-0 sm:space-x-2">
+								<UserIcon className="w-4 h-4 shrink-0" />
+								{task.assignees && task.assignees.length > 0 && (
+									<div className="flex items-center gap-1">
+										{task.assignees.map((assignee) => (
+											<div
+												key={assignee.id}
+												className="inline-flex justify-center items-center w-6 h-6 text-xs font-semibold text-gray-600 bg-gray-50 outline  outline-gray-300 rounded-full"
+												title={assignee.name || assignee.email || 'User'}>
+												{getInitials(assignee.name, assignee.email)}
+											</div>
+										))}
 									</div>
 								)}
+							</div>
+							<div className="flex items-center space-x-1 sm:space-x-2">
 								{task.dueDate && (
-									<div className="flex items-center space-x-1 text-xs text-gray-600 min-w-0">
+									<div className="flex items-center space-x-1 min-w-0 text-xs text-gray-600">
 										<Calendar className="w-3 h-3 shrink-0" />
 										<span className="truncate">
 											{new Date(task.dueDate).toLocaleDateString()}
 										</span>
 									</div>
 								)}
+								<div
+									className={`w-2 h-2 rounded-full shrink-0 ${getPriorityColor(
+										task.priority.toLowerCase() as 'low' | 'medium' | 'high',
+									)}`}
+								/>
 							</div>
-							<div
-								className={`w-2 h-2 rounded-full shrink-0 ${getPriorityColor(
-									task.priority.toLowerCase() as 'low' | 'medium' | 'high',
-								)}`}
-							/>
 						</div>
 					</div>
 				</CardContent>
@@ -769,14 +421,7 @@ const SortableTask = memo(function SortableTask({
 const TaskOverlay = memo(function TaskOverlay({
 	task,
 }: {
-	task: Task & {
-		assignee: {
-			id: string;
-			name: string | null;
-			email: string;
-			image: string | null;
-		} | null;
-	};
+	task: TaskWithAssignees;
 }) {
 	const getPriorityColor = useCallback(
 		(priority: 'low' | 'medium' | 'high'): string => {
@@ -793,37 +438,51 @@ const TaskOverlay = memo(function TaskOverlay({
 		},
 		[],
 	);
+
+	const getInitials = useCallback((name?: string | null, email?: string) => {
+		const source = name || email || '';
+		const parts = source.split(' ').filter(Boolean);
+		if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+		if (source.includes('@')) return source[0].toUpperCase();
+		return source.slice(0, 2).toUpperCase();
+	}, []);
 	return (
 		<div>
-			<Card className="cursor-pointer hover:shadow-md transition-shadow">
+			<Card className="transition-shadow cursor-pointer hover:shadow-md">
 				<CardContent className="">
 					<div className="space-y-1 sm:space-y-2">
 						{/* Task Header */}
-						<div className="flex items-start justify-between">
-							<h4 className="font-medium text-gray-900 text-sm leading-tight flex-1 min-w-0 pr-2">
+						<div className="flex justify-between items-start">
+							<h4 className="flex-1 pr-2 min-w-0 text-sm font-medium leading-tight text-gray-900">
 								{task.title}
 							</h4>
 						</div>
 
 						{/* Task Description */}
-						<p className="text-xs text-gray-600 line-clamp-2">
-							{task.description ?? 'No description'}
-						</p>
+						{task.description ? (
+							<p className="text-xs text-gray-600 line-clamp-2">
+								{task.description}
+							</p>
+						) : (
+							''
+						)}
 						{/* Task Metadata */}
-						<div className="flex items-center justify-between">
-							<div className="flex items-center space-x-1 sm:space-x-2 min-w-0">
-								{task.assignee && (
-									<div className="flex items-center space-x-1 text-xs text-gray-600 min-w-0">
-										<UserIcon className="w-3 h-3 shrink-0" />
-										<span className="truncate italic">
-											{task.assignee.name ||
-												task.assignee.email ||
-												'No assignee'}
-										</span>
+						<div className="flex justify-between items-center">
+							<div className="flex items-center space-x-1 min-w-0 sm:space-x-2">
+								{task.assignees && task.assignees.length > 0 && (
+									<div className="flex items-center gap-1">
+										{task.assignees.map((assignee) => (
+											<div
+												key={assignee.id}
+												className="inline-flex justify-center items-center w-6 h-6 text-xs font-semibold text-white bg-blue-500 rounded-full"
+												title={assignee.name || assignee.email || 'User'}>
+												{getInitials(assignee.name, assignee.email)}
+											</div>
+										))}
 									</div>
 								)}
 								{task.dueDate && (
-									<div className="flex items-center space-x-1 text-xs text-gray-600 min-w-0">
+									<div className="flex items-center space-x-1 min-w-0 text-xs text-gray-600">
 										<Calendar className="w-3 h-3 shrink-0" />
 										<span className="truncate">
 											{new Date(task.dueDate).toLocaleDateString()}
@@ -871,17 +530,7 @@ export default function BoardPage() {
 	const [newColor, setNewColor] = useState('');
 	const [updatingBoardTitle, setUpdatingBoardTitle] = useState(false);
 
-	const [activeTask, setActiveTask] = useState<
-		| (Task & {
-				assignee: {
-					id: string;
-					name: string | null;
-					email: string;
-					image: string | null;
-				} | null;
-		  })
-		| null
-	>(null);
+	const [activeTask, setActiveTask] = useState<TaskWithAssignees | null>(null);
 
 	const [isFilterOpen, setIsFilterOpen] = useState(false);
 	const [isCreatingColumn, setIsCreatingColumn] = useState(false);
@@ -903,6 +552,9 @@ export default function BoardPage() {
 	const [editingColumnTitle, setEditingColumnTitle] = useState('');
 	const [creatingColumn, setCreatingColumn] = useState(false);
 	const [updatingColumn, setUpdatingColumn] = useState(false);
+	const [inlineSavingColumnId, setInlineSavingColumnId] = useState<
+		string | null
+	>(null);
 
 	const [editingColumn, setEditingColumn] = useState<ColumnWithTasks | null>(
 		null,
@@ -996,15 +648,24 @@ export default function BoardPage() {
 	const handleEditTask = useCallback(
 		(
 			task: Task & {
-				assignee: {
+				assignees?: {
 					id: string;
 					name: string | null;
 					email: string;
 					image: string | null;
-				} | null;
+				}[];
 			},
 		) => {
-			setEditingTask(task);
+			setEditingTask(
+				task as unknown as Task & {
+					assignee: {
+						id: string;
+						name: string | null;
+						email: string;
+						image: string | null;
+					} | null;
+				},
+			);
 			setIsEditingTask(true);
 		},
 		[],
@@ -1020,7 +681,13 @@ export default function BoardPage() {
 				await updateRealTask(taskId, {
 					title: taskData.title,
 					description: taskData.description ?? null,
-					assigneeId: taskData.assigneeId ?? null,
+					assignees:
+						taskData.assigneeIds?.map((id) => ({
+							id,
+							name: null,
+							email: '',
+							image: null,
+						})) ?? [],
 					dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
 					priority: taskData.priority.toUpperCase() as
 						| 'LOW'
@@ -1047,16 +714,7 @@ export default function BoardPage() {
 				.find((task) => task.id === taskId);
 
 			if (task) {
-				setActiveTask(
-					task as Task & {
-						assignee: {
-							id: string;
-							name: string | null;
-							email: string;
-							image: string | null;
-						} | null;
-					},
-				);
+				setActiveTask(task as TaskWithAssignees);
 			}
 		},
 		[columns],
@@ -1224,11 +882,25 @@ export default function BoardPage() {
 		[editingColumnTitle, editingColumn, updatingColumn, updateRealColumn],
 	);
 
-	const handleEditColumn = useCallback((column: ColumnWithTasks) => {
-		setEditingColumn(column);
-		setIsEditingColumn(true);
-		setEditingColumnTitle(column.title);
-	}, []);
+	const handleInlineSaveColumn = useCallback(
+		async (columnId: string, title: string) => {
+			if (!title.trim()) return;
+			setInlineSavingColumnId(columnId);
+			setColumns((prev: ColumnWithTasks[]) =>
+				prev.map((col) =>
+					col.id === columnId ? { ...col, title: title.trim() } : col,
+				),
+			);
+			try {
+				await updateRealColumn(columnId, title.trim());
+			} catch (error) {
+				console.error('Error updating column:', error);
+			} finally {
+				setInlineSavingColumnId(null);
+			}
+		},
+		[setColumns, updateRealColumn],
+	);
 
 	const clearFilters = useCallback(() => {
 		setFilters({
@@ -1351,9 +1023,9 @@ export default function BoardPage() {
 
 	if (loading) {
 		return (
-			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+			<div className="flex justify-center items-center min-h-screen bg-gray-50">
 				<div className="text-center">
-					<Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-4" />
+					<Loader2 className="mx-auto mb-4 w-10 h-10 text-blue-600 animate-spin" />
 					<p className="text-lg font-medium text-gray-900">Loading board...</p>
 				</div>
 			</div>
@@ -1362,7 +1034,7 @@ export default function BoardPage() {
 
 	if (error) {
 		return (
-			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+			<div className="flex justify-center items-center min-h-screen bg-gray-50">
 				<div className="text-center">
 					<p className="text-lg font-medium text-red-600">{error}</p>
 				</div>
@@ -1372,7 +1044,7 @@ export default function BoardPage() {
 
 	return (
 		<>
-			<div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+			<div className="flex overflow-hidden flex-col h-screen bg-gray-50">
 				<Navbar
 					boardTitle={board?.title}
 					onEditBoard={() => {
@@ -1404,7 +1076,7 @@ export default function BoardPage() {
 
 							<div className="space-y-2">
 								<Label>Board Color</Label>
-								<div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+								<div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
 									{[
 										'bg-blue-500',
 										'bg-green-500',
@@ -1444,7 +1116,7 @@ export default function BoardPage() {
 									disabled={updatingBoardTitle}>
 									{updatingBoardTitle ? (
 										<>
-											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+											<Loader2 className="mr-2 w-4 h-4 animate-spin" />
 											Updating...
 										</>
 									) : (
@@ -1510,7 +1182,7 @@ export default function BoardPage() {
 								/>
 							</div>
 
-							<div className="flex justify-between pt-4 gap-2">
+							<div className="flex gap-2 justify-between pt-4">
 								<Button type="button" variant="outline" onClick={clearFilters}>
 									Clear Filters
 								</Button>
@@ -1528,7 +1200,7 @@ export default function BoardPage() {
 				{/* Board Content */}
 				<main className="flex-1 flex flex-col w-full px-4 sm:px-6 lg:px-8 py-6 max-w-[1920px] mx-auto overflow-hidden">
 					{/* Stats */}
-					<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 mb-6 space-y-4 sm:space-y-0 px-8 flex-shrink-0">
+					<div className="flex flex-col flex-shrink-0 gap-4 px-8 mb-6 space-y-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:space-y-0">
 						<div className="flex flex-wrap gap-4 sm:gap-6">
 							<div className="text-sm text-gray-600">
 								<span className="font-medium">Total Tasks: </span>
@@ -1587,7 +1259,8 @@ export default function BoardPage() {
 									key={key}
 									column={column}
 									onCreateTask={createTask}
-									onEditColumn={handleEditColumn}>
+									onInlineSaveColumn={handleInlineSaveColumn}
+									inlineSavingColumnId={inlineSavingColumnId}>
 									<SortableContext
 										items={column.tasks.map((task: Task) => task.id)}
 										strategy={verticalListSortingStrategy}>
@@ -1655,7 +1328,7 @@ export default function BoardPage() {
 							<Button type="submit" disabled={creatingColumn}>
 								{creatingColumn ? (
 									<>
-										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										<Loader2 className="mr-2 w-4 h-4 animate-spin" />
 										Creating...
 									</>
 								) : (
@@ -1701,7 +1374,7 @@ export default function BoardPage() {
 							<Button type="submit" disabled={updatingColumn}>
 								{updatingColumn ? (
 									<>
-										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										<Loader2 className="mr-2 w-4 h-4 animate-spin" />
 										Updating...
 									</>
 								) : (
@@ -1715,18 +1388,15 @@ export default function BoardPage() {
 
 			{/* Edit Task Dialog */}
 			<Dialog open={isEditingTask} onOpenChange={setIsEditingTask}>
-				<DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+				<DialogContent className="max-w-7xl w-[95vw] max-h-[90vh] overflow-y-auto">
 					<DialogHeader>
-						<DialogTitle>Edit Task</DialogTitle>
-						<p className="text-sm text-gray-600">
-							Update task details and checklist.
-						</p>
+						<DialogTitle className="text-lg font-medium">Edit Task</DialogTitle>
 					</DialogHeader>
 					{editingTask && board?.id && (
-						<TaskForm
+						<TaskDialog
 							columnId={editingTask.columnId}
 							boardId={board.id}
-							task={editingTask}
+							task={editingTask as TaskDialogTask}
 							onUpdateTask={handleUpdateTask}
 							onClose={() => {
 								setIsEditingTask(false);

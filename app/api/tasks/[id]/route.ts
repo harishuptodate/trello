@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-utils';
-import { taskService, columnService } from '@/lib/services';
-import { hasOrgAccess } from '@/lib/auth-rules';
+import { taskService } from '@/lib/services';
+import { hasBoardAccess } from '@/lib/auth-rules';
 import { prisma } from '@/lib/prisma';
 
 export async function PUT(
@@ -11,7 +11,19 @@ export async function PUT(
 	try {
 		const user = await requireAuth();
 		const { id } = await params;
-		const body = await request.json();
+		const rawBody = await request.json();
+		const body = {
+			...rawBody,
+			description: rawBody.description ?? undefined,
+			// normalize UI payloads that send assignees objects instead of ids
+			assigneeIds: Array.isArray(rawBody.assigneeIds)
+				? rawBody.assigneeIds
+				: Array.isArray(rawBody.assignees)
+					? rawBody.assignees
+							.map((a: { id?: string }) => a?.id)
+							.filter(Boolean)
+					: undefined,
+		};
 
 		// Get task to find board
 		const task = await prisma.task.findUnique({
@@ -19,7 +31,9 @@ export async function PUT(
 			include: {
 				column: {
 					include: {
-						board: true,
+						board: {
+							select: { id: true, organizationId: true },
+						},
 					},
 				},
 			},
@@ -30,30 +44,24 @@ export async function PUT(
 		}
 
 		// Verify user has access to the organization
-		const hasAccess = await hasOrgAccess(
-			user.id,
-			task.column.board.organizationId,
-		);
+		const hasAccess = await hasBoardAccess(user.id, task.column.board.id);
 		if (!hasAccess) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
-		// If assigneeId is being updated, verify they're in the same organization
-		if (body.assigneeId !== undefined) {
-			if (body.assigneeId) {
-				const assigneeMember = await prisma.organizationMember.findFirst({
-					where: {
-						organizationId: task.column.board.organizationId,
-						userId: body.assigneeId,
-					},
-				});
-
-				if (!assigneeMember) {
-					return NextResponse.json(
-						{ error: 'Assignee must be a member of the organization' },
-						{ status: 400 },
-					);
-				}
+		// If assigneeIds is being updated, verify users exist (board membership handled in service)
+		if (body.assigneeIds !== undefined && body.assigneeIds.length > 0) {
+			const users = await prisma.user.findMany({
+				where: { id: { in: body.assigneeIds } },
+				select: { id: true },
+			});
+			const userIds = new Set(users.map((u) => u.id));
+			const invalid = body.assigneeIds.filter((id: string) => !userIds.has(id));
+			if (invalid.length > 0) {
+				return NextResponse.json(
+					{ error: 'Assignee must be a valid user' },
+					{ status: 400 },
+				);
 			}
 		}
 
@@ -88,20 +96,17 @@ export async function DELETE(
 					},
 				},
 			},
-		});
+	});
 
-		if (!task) {
-			return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-		}
+	if (!task) {
+		return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+	}
 
-		// Verify user has access to the organization
-		const hasAccess = await hasOrgAccess(
-			user.id,
-			task.column.board.organizationId,
-		);
-		if (!hasAccess) {
-			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-		}
+	// Verify user has access to the organization
+	const hasAccess = await hasBoardAccess(user.id, task.column.boardId);
+	if (!hasAccess) {
+		return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+	}
 
 		await taskService.deleteTask(id);
 		return NextResponse.json({ success: true });

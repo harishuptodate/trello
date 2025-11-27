@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-utils';
 import { columnService } from '@/lib/services';
-import { hasOrgAccess } from '@/lib/auth-rules';
+import { hasBoardAccess, hasOrgAccess } from '@/lib/auth-rules';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(
@@ -23,7 +23,7 @@ export async function GET(
 		}
 
 		// Verify user has access to the organization
-		const hasAccess = await hasOrgAccess(user.id, column.board.organizationId);
+		const hasAccess = await hasBoardAccess(user.id, column.board.id);
 		if (!hasAccess) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
@@ -56,7 +56,7 @@ export async function PUT(
 		}
 
 		// Verify user has access to the organization
-		const hasAccess = await hasOrgAccess(user.id, column.board.organizationId);
+		const hasAccess = await hasBoardAccess(user.id, column.board.id);
 		if (!hasAccess) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
@@ -91,8 +91,8 @@ export async function DELETE(
 		}
 
 		// Verify user has access to the organization
-		const hasAccess = await hasOrgAccess(user.id, column.board.organizationId);
-		if (!hasAccess) {
+		const hasAdmin = await hasOrgAccess(user.id, column.board.organizationId);
+		if (!hasAdmin) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 

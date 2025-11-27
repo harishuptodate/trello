@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-utils';
 import { boardService } from '@/lib/services';
-import { hasOrgAccess } from '@/lib/auth-rules';
+import { hasOrgAccess, isOrgAdmin } from '@/lib/auth-rules';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(
@@ -59,9 +59,9 @@ export async function DELETE(
 		const { id } = await params;
 		const board = await boardService.getBoard(id);
 
-		const hasAccess = await hasOrgAccess(user.id, board.organizationId);
-		if (!hasAccess) {
-			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+		const isAdmin = await isOrgAdmin(user.id, board.organizationId);
+		if (!isAdmin) {
+			return NextResponse.json({ error: 'Forbidden'}, { status: 403 });
 		}
 
 		await boardService.deleteBoard(id);

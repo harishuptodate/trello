@@ -4,6 +4,7 @@ import { useOrganization } from '../organization-context';
 import type { Board, Column, Task } from '@prisma/client';
 import type { ColumnWithTasks, BoardWithColumns } from '../services';
 import type { TaskData } from '@/app/boards/[id]/page';
+import type { TaskWithAssignees } from '../services';
 
 export type BoardType = Board & {
 	createdBy: {
@@ -140,7 +141,10 @@ export function useBoards(organizationId?: string | null) {
 				method: 'DELETE',
 			});
 
-			if (!response.ok) throw new Error('Failed to delete board');
+			if (!response.ok) {
+				const error = await response.json();
+				throw new Error('Failed to delete board' + (error.details || ''));
+			}
 
 			setBoards((prev) => prev.filter((board) => board.id !== boardId));
 			// Invalidate cache
@@ -260,7 +264,10 @@ export function useBoard(boardId: string) {
 				}),
 			});
 
-			if (!response.ok) throw new Error('Failed to create task');
+			if (!response.ok) {
+				const error = await response.json();
+				throw new Error(error.details || 'Failed to create task');
+			}
 
 			const newTask = await response.json();
 			setColumns((prev) =>
@@ -315,12 +322,12 @@ export function useBoard(boardId: string) {
 							newSortOrder,
 							0,
 							taskToMove as unknown as Task & {
-								assignee: {
+								assignees: {
 									id: string;
 									name: string | null;
 									email: string;
 									image: string | null;
-								} | null;
+								}[];
 							},
 						);
 					}
@@ -393,7 +400,7 @@ export function useBoard(boardId: string) {
 		}
 	}
 
-	async function updateRealTask(taskId: string, updates: Partial<Task>) {
+	async function updateRealTask(taskId: string, updates: Partial<TaskWithAssignees>) {
 		try {
 			const response = await fetch(`/api/tasks/${taskId}`, {
 				method: 'PUT',

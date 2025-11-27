@@ -17,7 +17,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useBoards, BoardType } from '@/lib/hooks/useBoards';
+import {
+	useBoards,
+	useCreateBoard,
+	useUpdateBoard,
+	useDeleteBoard,
+	BoardType,
+} from '@/lib/hooks/queries/useBoards';
 import { useSession } from 'next-auth/react';
 import {
 	Filter,
@@ -49,14 +55,13 @@ export default function DashboardPage() {
 	} = useOrganization();
 
 	const {
-		createBoard,
-		boards,
-		loading,
-		error,
-		updateBoard,
-		deleteBoard,
+		data: boards = [],
+		isLoading: boardsLoading,
 		refetch,
 	} = useBoards(selectedOrgId);
+	const createBoardMutation = useCreateBoard(selectedOrgId);
+	const updateBoardMutation = useUpdateBoard(selectedOrgId);
+	const deleteBoardMutation = useDeleteBoard(selectedOrgId);
 	const router = useRouter();
 	const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 	const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -115,7 +120,7 @@ export default function DashboardPage() {
 			if (creatingBoard) return;
 			setCreatingBoard(true);
 			try {
-				await createBoard({
+				await createBoardMutation.mutateAsync({
 					title: boardTitle,
 					createDefaultColumns,
 				});
@@ -128,7 +133,12 @@ export default function DashboardPage() {
 				setCreatingBoard(false);
 			}
 		},
-		[boardTitle, createDefaultColumns, creatingBoard, createBoard],
+		[
+			boardTitle,
+			createDefaultColumns,
+			creatingBoard,
+			createBoardMutation,
+		],
 	);
 
 	const handleEditBoard = useCallback(
@@ -161,9 +171,13 @@ export default function DashboardPage() {
 			if (!editingBoard || !editTitle.trim() || updatingBoard) return;
 			setUpdatingBoard(true);
 			try {
-				await updateBoard(editingBoard.id, {
-					title: editTitle.trim(),
-					color: editColor || editingBoard.color,
+				await updateBoardMutation.mutateAsync({
+					boardId: editingBoard.id,
+					updates: {
+						title: editTitle.trim(),
+						color: editColor || editingBoard.color,
+					},
+					// color: editColor || editingBoard.color,
 				});
 				setIsEditDialogOpen(false);
 				setEditingBoard(null);
@@ -175,22 +189,23 @@ export default function DashboardPage() {
 				setUpdatingBoard(false);
 			}
 		},
-		[editingBoard, editTitle, editColor, updatingBoard, updateBoard],
+		[editingBoard, editTitle, editColor, updatingBoard, updateBoardMutation],
 	);
 
 	const handleConfirmDelete = useCallback(async () => {
 		if (!deletingBoard || deletingBoardId) return;
 		setDeletingBoardId(deletingBoard.id);
 		try {
-			await deleteBoard(deletingBoard.id);
+			await deleteBoardMutation.mutateAsync(deletingBoard.id);
 			setIsDeleteDialogOpen(false);
 			setDeletingBoard(null);
 		} catch (error) {
 			console.error('Error deleting board:', error);
 		} finally {
 			setDeletingBoardId(null);
+			setIsDeleteDialogOpen(false);
 		}
-	}, [deletingBoard, deletingBoardId, deleteBoard]);
+	}, [deletingBoard, deletingBoardId, deleteBoardMutation]);
 
 	// Close dropdown when clicking outside
 	useEffect(() => {
@@ -217,7 +232,7 @@ export default function DashboardPage() {
 		});
 	}, []);
 
-	if (orgLoading || (loading && selectedOrgId)) {
+	if (orgLoading || (boardsLoading && selectedOrgId)) {
 		return (
 			<div className="flex gap-2 justify-center items-center h-screen">
 				<Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
@@ -418,7 +433,7 @@ export default function DashboardPage() {
 						<div className="text-sm text-gray-500">No boards yet</div>
 					) : viewMode === 'grid' ? (
 						<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 sm:gap-4">
-							{filteredBoards.map((board, key) => (
+							{filteredBoards.map((board: BoardType, key: number) => (
 								<div key={key} className="relative">
 									<Link href={`/boards/${board.id}`}>
 										<Card className="transition-shadow cursor-pointer hover:shadow-lg group">
@@ -509,7 +524,7 @@ export default function DashboardPage() {
 						</div>
 					) : (
 						<div>
-							{filteredBoards.map((board, key) => (
+							{filteredBoards.map((board: BoardType, key: number) => (
 								<div key={key} className={key > 0 ? 'mt-4' : ''}>
 									<div className="relative">
 										<Link href={`/boards/${board.id}`}>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-utils';
 import { columnService } from '@/lib/services';
-import { hasOrgAccess } from '@/lib/auth-rules';
+import { hasBoardAccess } from '@/lib/auth-rules';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
@@ -26,8 +26,8 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'Board not found' }, { status: 404 });
 		}
 
-		// Verify user has access to the organization
-		const hasAccess = await hasOrgAccess(user.id, board.organizationId);
+		// Verify user has access to the board
+		const hasAccess = await hasBoardAccess(user.id, board.id);
 		if (!hasAccess) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}

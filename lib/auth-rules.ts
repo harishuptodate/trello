@@ -1,5 +1,33 @@
 import { prisma } from './prisma';
 
+export async function isBoardMember(userId: string, boardId: string) {
+	const member = await prisma.boardMember.findUnique({
+		where: {
+			boardId_userId: {
+				boardId,
+				userId,
+			},
+		},
+	});
+	return !!member;
+}
+
+export async function hasBoardAccess(userId: string, boardId: string) {
+	const board = await prisma.board.findUnique({
+		where: { id: boardId },
+		select: { organizationId: true },
+	});
+
+	if (!board) return false;
+
+	const [orgAdmin, boardMember] = await Promise.all([
+		isOrgAdmin(userId, board.organizationId),
+		isBoardMember(userId, boardId),
+	]);
+
+	return orgAdmin || boardMember;
+}
+
 export async function isOrgAdmin(
 	userId: string,
 	orgId: string,

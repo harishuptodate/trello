@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-utils';
 import { taskService } from '@/lib/services';
-import { hasOrgAccess } from '@/lib/auth-rules';
+import { hasBoardAccess } from '@/lib/auth-rules';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
@@ -30,11 +30,11 @@ export async function PUT(
 					},
 				},
 			},
-		});
+	});
 
-		if (!task) {
-			return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-		}
+	if (!task) {
+		return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+	}
 
 		// Get new column to verify it's in the same board
 		const newColumn = await prisma.column.findUnique({
@@ -53,16 +53,13 @@ export async function PUT(
 				{ error: 'Cannot move task to a different board' },
 				{ status: 400 },
 			);
-		}
+	}
 
-		// Verify user has access to the organization
-		const hasAccess = await hasOrgAccess(
-			user.id,
-			task.column.board.organizationId,
-		);
-		if (!hasAccess) {
-			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-		}
+	// Verify user has access to the organization
+	const hasAccess = await hasBoardAccess(user.id, task.column.boardId);
+	if (!hasAccess) {
+		return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+	}
 
 		await taskService.moveTask(id, newColumnId, newSortOrder);
 		return NextResponse.json({ success: true });

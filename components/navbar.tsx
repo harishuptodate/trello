@@ -12,6 +12,7 @@ import {
 	User,
 	ChevronDown,
 	Building2,
+	Pencil,
 } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
 import { Button } from './ui/button';
@@ -25,8 +26,9 @@ import {
 	SelectValue,
 } from './ui/select';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useOrganization } from '@/lib/organization-context';
+import { useRef, useCallback } from 'react';
 
 type NavbarProps = {
 	boardTitle?: string;
@@ -58,11 +60,16 @@ export default function Navbar({
 	selectedOrgId,
 	onOrgChange,
 }: NavbarProps) {
-	const { data: session } = useSession();
+	const { data: session, update: updateSession } = useSession();
 	const pathname = usePathname();
-	const router = useRouter();
 	const { selectedOrgId: contextOrgId, setSelectedOrgId } = useOrganization();
 	const [userMenuOpen, setUserMenuOpen] = useState(false);
+	const [isEditingName, setIsEditingName] = useState(false);
+	const [nameInput, setNameInput] = useState('');
+	const [isSavingName, setIsSavingName] = useState(false);
+	const [nameError, setNameError] = useState('');
+	const [displayName, setDisplayName] = useState('User');
+	const userMenuRef = useRef<HTMLDivElement | null>(null);
 
 	const isDashboardPage = pathname === '/dashboard';
 	const isBoardPage = pathname.startsWith('/boards/');
@@ -70,9 +77,176 @@ export default function Navbar({
 
 	const currentOrgId = selectedOrgId || contextOrgId;
 
+	const computeDisplayName = () => {
+		if (session?.user?.name) return session.user.name;
+		if (session?.user?.email) {
+			const [local] = session.user.email.split('@');
+			return local.charAt(0).toUpperCase() + local.slice(1);
+		}
+		return 'User';
+	};
+
+	useEffect(() => {
+		const currentDisplay = computeDisplayName();
+		setDisplayName(currentDisplay);
+		setNameInput(currentDisplay);
+	}, [session?.user?.name, session?.user?.email]);
+
 	const handleSignOut = async () => {
 		await signOut({ callbackUrl: '/' });
 	};
+
+	const resetNameEditing = useCallback(() => {
+		setIsEditingName(false);
+		setNameInput(displayName || '');
+		setNameError('');
+	}, [displayName]);
+
+	const handleNameSubmit = async (event?: React.FormEvent) => {
+		event?.preventDefault();
+
+		const trimmedName = nameInput.trim();
+		if (!trimmedName) {
+			setNameError('Please enter a name.');
+			return;
+		}
+
+		setIsSavingName(true);
+		setNameError('');
+
+		try {
+			const response = await fetch('/api/users', {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ name: trimmedName }),
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data?.error || 'Failed to update name.');
+			}
+
+			await updateSession?.({
+				// Trigger NextAuth session update; jwt callback syncs token fields
+				user: {
+					...session?.user,
+					name: data.user?.name || trimmedName,
+				},
+			});
+			setDisplayName(trimmedName);
+			setNameInput(trimmedName);
+			setIsEditingName(false);
+		} catch (error) {
+			setNameError(
+				error instanceof Error ? error.message : 'Failed to update name.',
+			);
+		} finally {
+			setIsSavingName(false);
+		}
+	};
+
+	useEffect(() => {
+		if (!isEditingName) return;
+		const handleClickOutside = (event: MouseEvent) => {
+			if (
+				userMenuRef.current &&
+				!userMenuRef.current.contains(event.target as Node)
+			) {
+				resetNameEditing();
+			}
+		};
+		document.addEventListener('mousedown', handleClickOutside);
+		return () => document.removeEventListener('mousedown', handleClickOutside);
+	}, [isEditingName, resetNameEditing]);
+
+	useEffect(() => {
+		if (!userMenuOpen) return;
+		const handleClickOutside = (event: MouseEvent) => {
+			if (
+				userMenuRef.current &&
+				!userMenuRef.current.contains(event.target as Node)
+			) {
+				setUserMenuOpen(false);
+				resetNameEditing();
+			}
+		};
+		const handleEscape = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				setUserMenuOpen(false);
+				resetNameEditing();
+			}
+		};
+		document.addEventListener('mousedown', handleClickOutside);
+		document.addEventListener('keydown', handleEscape);
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+			document.removeEventListener('keydown', handleEscape);
+		};
+	}, [userMenuOpen, resetNameEditing]);
+
+	const renderUserMenu = () => (
+		<div
+			ref={userMenuRef}
+			className="absolute right-0 mt-2 w-56 bg-white border rounded-md shadow-lg z-50">
+			<div className="p-3 border-b">
+				{!isEditingName ? (
+					<div className="flex items-start justify-between gap-2">
+						<div className="min-w-0">
+							<p className="text-sm font-medium truncate">
+								{displayName || 'User'}
+							</p>
+							<p className="text-xs text-gray-500 truncate">
+								{session?.user?.email}
+							</p>
+						</div>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-8 w-8 shrink-0"
+							onClick={() => setIsEditingName(true)}>
+							<Pencil className="h-4 w-4" />
+						</Button>
+					</div>
+				) : (
+					<form className="space-y-2" onSubmit={handleNameSubmit}>
+						<Input
+							value={nameInput}
+							onChange={(event) => setNameInput(event.target.value)}
+							autoFocus
+							onKeyDown={(event) => {
+								if (event.key === 'Enter') {
+									handleNameSubmit(event);
+								}
+								if (event.key === 'Escape') {
+									resetNameEditing();
+								}
+							}}
+							className="h-9 bg-blue-50 ring-2 ring-blue-200 focus-visible:ring-blue-500 focus-visible:ring-1"
+						/>
+						{nameError && (
+							<p className="text-xs text-red-500">{nameError}</p>
+						)}
+						<Button
+							type="submit"
+							size="sm"
+							disabled={isSavingName}
+							className="sm:hidden">
+							{isSavingName ? 'Saving...' : 'Save'}
+						</Button>
+					</form>
+				)}
+			</div>
+			<button
+				onClick={handleSignOut}
+				className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2">
+				<LogOut className="h-4 w-4" />
+				Sign Out
+			</button>
+		</div>
+	);
 
 	if (isDashboardPage) {
 		return (
@@ -143,28 +317,11 @@ export default function Navbar({
 								onClick={() => setUserMenuOpen(!userMenuOpen)}>
 								<User className="h-4 w-4" />
 								<span className="hidden sm:inline truncate max-w-[100px]">
-									{session?.user?.name || session?.user?.email?.split('@')[0]}
+									{displayName}
 								</span>
 								<ChevronDown className="h-4 w-4" />
 							</Button>
-							{userMenuOpen && (
-								<div className="absolute right-0 mt-2 w-48 bg-white border rounded-md shadow-lg z-50">
-									<div className="p-2 border-b">
-										<p className="text-sm font-medium truncate">
-											{session?.user?.name || 'User'}
-										</p>
-										<p className="text-xs text-gray-500 truncate">
-											{session?.user?.email}
-										</p>
-									</div>
-									<button
-										onClick={handleSignOut}
-										className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2">
-										<LogOut className="h-4 w-4" />
-										Sign Out
-									</button>
-								</div>
-							)}
+							{userMenuOpen && renderUserMenu()}
 						</div>
 					</div>
 				</div>
@@ -232,24 +389,7 @@ export default function Navbar({
 									<User className="h-4 w-4" />
 									<ChevronDown className="h-4 w-4" />
 								</Button>
-								{userMenuOpen && (
-									<div className="absolute right-0 mt-2 w-48 bg-white border rounded-md shadow-lg z-50">
-										<div className="p-2 border-b">
-											<p className="text-sm font-medium truncate">
-												{session?.user?.name || 'User'}
-											</p>
-											<p className="text-xs text-gray-500 truncate">
-												{session?.user?.email}
-											</p>
-										</div>
-										<button
-											onClick={handleSignOut}
-											className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2">
-											<LogOut className="h-4 w-4" />
-											Sign Out
-										</button>
-									</div>
-								)}
+								{userMenuOpen && renderUserMenu()}
 							</div>
 						</div>
 					</div>
@@ -275,11 +415,7 @@ export default function Navbar({
 						<div className="flex flex-col sm:flex-row items-end sm:items-center space-y-1 sm:space-y-0">
 							<span className="text-xs font-semibold sm:text-sm text-shadow-gray-600 hidden sm:block mr-2 sm:mr-4">
 								Welcome,{' '}
-								{session?.user?.name ||
-									(session?.user?.email
-										? session.user.email.split('@')[0].charAt(0).toUpperCase() +
-										  session.user.email.split('@')[0].slice(1)
-										: 'User')}
+								{displayName}
 							</span>
 						</div>
 
@@ -292,24 +428,7 @@ export default function Navbar({
 									<User className="h-4 w-4" />
 									<ChevronDown className="h-4 w-4" />
 								</Button>
-								{userMenuOpen && (
-									<div className="absolute right-0 mt-2 w-48 bg-white border rounded-md shadow-lg z-50">
-										<div className="p-2 border-b">
-											<p className="text-sm font-medium truncate">
-												{session?.user?.name || 'User'}
-											</p>
-											<p className="text-xs text-gray-500 truncate">
-												{session?.user?.email}
-											</p>
-										</div>
-										<button
-											onClick={handleSignOut}
-											className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2">
-											<LogOut className="h-4 w-4" />
-											Sign Out
-										</button>
-									</div>
-								)}
+								{userMenuOpen && renderUserMenu()}
 							</div>
 						</div>
 				
