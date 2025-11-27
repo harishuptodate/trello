@@ -4,7 +4,6 @@ import { boardMemberService } from '@/lib/services';
 import { hasBoardAccess, isOrgAdmin } from '@/lib/auth-rules';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-
 const addMemberSchema = z.object({
 	userId: z.string(),
 	role: z.enum(['ADMIN', 'MEMBER']).optional().default('MEMBER'),
@@ -56,10 +55,12 @@ export async function POST(
 			return NextResponse.json({ error: 'Board not found' }, { status: 404 });
 		}
 
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const isAdmin =
 			(await isOrgAdmin(user.id, board.organizationId)) ||
 			(
-				await prisma.boardMember.findUnique({
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				await (prisma as any).boardMember.findUnique({
 					where: { boardId_userId: { boardId: id, userId: user.id } },
 				})
 			)?.role === 'ADMIN';
