@@ -839,7 +839,7 @@ export default function DashboardPage() {
 			{/* create Board */}
 
 			<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-				<DialogContent className="w-[95vw] max-w-425px mx-auto">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>Enter Board Title</DialogTitle>
 					</DialogHeader>

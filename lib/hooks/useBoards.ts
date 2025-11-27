@@ -400,7 +400,10 @@ export function useBoard(boardId: string) {
 		}
 	}
 
-	async function updateRealTask(taskId: string, updates: Partial<TaskWithAssignees>) {
+	async function updateRealTask(
+		taskId: string,
+		updates: Partial<TaskWithAssignees>,
+	) {
 		try {
 			const response = await fetch(`/api/tasks/${taskId}`, {
 				method: 'PUT',
@@ -430,6 +433,25 @@ export function useBoard(boardId: string) {
 		}
 	}
 
+	async function deleteRealColumn(columnId: string) {
+		try {
+			const response = await fetch(`/api/columns/${columnId}`, {
+				method: 'DELETE',
+			});
+
+			if (!response.ok) throw new Error('Failed to delete column');
+
+			setColumns((prev) => prev.filter((col) => col.id !== columnId));
+			// Invalidate cache
+			if (boardCacheRef.current?.boardId === boardId) {
+				boardCacheRef.current = null;
+			}
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to delete column.');
+			throw err;
+		}
+	}
+
 	return {
 		board,
 		columns,
@@ -442,6 +464,7 @@ export function useBoard(boardId: string) {
 		moveTask,
 		updateRealColumn,
 		updateRealTask,
+		deleteRealColumn,
 		refetch: loadBoard,
 	};
 }

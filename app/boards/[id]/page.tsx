@@ -26,6 +26,7 @@ import {
 	Loader2,
 	Check,
 	User,
+	Trash2,
 } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
@@ -79,104 +80,32 @@ const DroppableColumn = memo(function DroppableColumn({
 	onCreateTask,
 	onInlineSaveColumn,
 	inlineSavingColumnId,
+	onDeleteColumn,
 }: {
 	column: ColumnWithTasks;
 	children: React.ReactNode;
 	onCreateTask: (columnId: string, taskData: any) => Promise<void>;
 	onInlineSaveColumn: (columnId: string, title: string) => Promise<void>;
 	inlineSavingColumnId: string | null;
+	onDeleteColumn?: (columnId: string) => Promise<void>;
 }) {
 	const { setNodeRef, isOver } = useDroppable({ id: column.id });
 	const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
-	const scrollContainerRef = useRef<HTMLDivElement>(null);
-	const [isDraggingScroll, setIsDraggingScroll] = useState(false);
-	const [startY, setStartY] = useState(0);
-	const [scrollTop, setScrollTop] = useState(0);
+	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+	const [isDeleting, setIsDeleting] = useState(false);
 
-	// Vertical drag-to-scroll handlers
-	const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-		// Only start drag-to-scroll if clicking on the container itself, not on interactive elements
-		const target = e.target as HTMLElement;
-		if (
-			target.closest('button') ||
-			target.closest('[role="button"]') ||
-			target.closest('input') ||
-			target.closest('textarea') ||
-			target.closest('select') ||
-			target.closest('[data-draggable]') ||
-			target.closest('[data-sortable-id]')
-		) {
-			return;
+	const handleDeleteColumn = useCallback(async () => {
+		if (!onDeleteColumn) return;
+		setIsDeleting(true);
+		try {
+			await onDeleteColumn(column.id);
+			setIsDeleteDialogOpen(false);
+		} catch (err) {
+			console.error('Failed to delete column:', err);
+		} finally {
+			setIsDeleting(false);
 		}
-
-		// Only enable drag-to-scroll on large screens (lg breakpoint)
-		if (window.innerWidth < 1024) {
-			return;
-		}
-
-		if (scrollContainerRef.current) {
-			setIsDraggingScroll(true);
-			const rect = scrollContainerRef.current.getBoundingClientRect();
-			setStartY(e.pageY - rect.top);
-			setScrollTop(scrollContainerRef.current.scrollTop);
-			scrollContainerRef.current.style.userSelect = 'none';
-		}
-	}, []);
-
-	const handleMouseMove = useCallback(
-		(e: React.MouseEvent<HTMLDivElement>) => {
-			if (!isDraggingScroll || !scrollContainerRef.current) return;
-			e.preventDefault();
-			const rect = scrollContainerRef.current.getBoundingClientRect();
-			const y = e.pageY - rect.top;
-			const walk = (y - startY) * 2; // Scroll speed multiplier
-			scrollContainerRef.current.scrollTop = scrollTop - walk;
-		},
-		[isDraggingScroll, startY, scrollTop],
-	);
-
-	const handleMouseUp = useCallback(() => {
-		if (scrollContainerRef.current) {
-			setIsDraggingScroll(false);
-			scrollContainerRef.current.style.userSelect = '';
-		}
-	}, []);
-
-	const handleMouseLeave = useCallback(() => {
-		if (scrollContainerRef.current) {
-			setIsDraggingScroll(false);
-			scrollContainerRef.current.style.userSelect = '';
-		}
-	}, []);
-
-	// Global mouse event handlers for vertical drag-to-scroll
-	useEffect(() => {
-		const handleGlobalMouseMove = (e: MouseEvent) => {
-			if (!isDraggingScroll || !scrollContainerRef.current) return;
-			e.preventDefault();
-			const rect = scrollContainerRef.current.getBoundingClientRect();
-			const y = e.pageY - rect.top;
-			const walk = (y - startY) * 2;
-			scrollContainerRef.current.scrollTop = scrollTop - walk;
-		};
-
-		const handleGlobalMouseUp = () => {
-			if (scrollContainerRef.current) {
-				setIsDraggingScroll(false);
-				scrollContainerRef.current.style.userSelect = '';
-			}
-		};
-
-		if (isDraggingScroll) {
-			document.addEventListener('mousemove', handleGlobalMouseMove);
-			document.addEventListener('mouseup', handleGlobalMouseUp);
-		}
-
-		return () => {
-			document.removeEventListener('mousemove', handleGlobalMouseMove);
-			document.removeEventListener('mouseup', handleGlobalMouseUp);
-		};
-	}, [isDraggingScroll, startY, scrollTop]);
+	}, [onDeleteColumn, column.id]);
 
 	return (
 		<div
@@ -187,36 +116,39 @@ const DroppableColumn = memo(function DroppableColumn({
 			<div
 				className={`bg-white rounded-lg shadow-sm border flex flex-col ${
 					isOver ? 'ring-2 ring-blue-300' : ''
-				}`}
-				style={{ maxHeight: 'calc(100vh - 200px)' }}>
+				}`}>
 				{/* Column Header */}
-				<div className="flex-shrink-0 p-3 border-b sm:p-4">
+				<div className="flex-shrink-0 p-3 border-b sm:p-4 group">
 					<div className="flex items-center justify-between gap-2">
-						<InlineEdit
-							value={column.title}
-							placeholder="Edit column title..."
-							onSave={(val) => onInlineSaveColumn(column.id, val)}
-							saving={inlineSavingColumnId === column.id}
-							className="flex-1 min-w-0"
-						/>
+						<div className="flex-1 min-w-0 flex items-center gap-2">
+							<InlineEdit
+								value={column.title}
+								placeholder="Edit column title..."
+								onSave={(val) => onInlineSaveColumn(column.id, val)}
+								saving={inlineSavingColumnId === column.id}
+								className="flex-1 min-w-0"
+							/>
+							{onDeleteColumn && (
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
+									onClick={(e) => {
+										e.stopPropagation();
+										setIsDeleteDialogOpen(true);
+									}}>
+									<Trash2 className="w-4 h-4" />
+								</Button>
+							)}
+						</div>
 						<Badge variant="secondary" className="flex-shrink-0 text-xs">
 							{column.tasks.length}
 						</Badge>
 					</div>
 				</div>
 				{/* columns content */}
-				<div className="flex flex-col flex-1 p-2 min-h-0">
-					<div
-						ref={scrollContainerRef}
-						onMouseDown={handleMouseDown}
-						onMouseMove={handleMouseMove}
-						onMouseUp={handleMouseUp}
-						onMouseLeave={handleMouseLeave}
-						className={`flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${
-							isDraggingScroll ? 'lg:cursor-grabbing' : 'lg:cursor-grab'
-						}`}>
-						{children}
-					</div>
+				<div className="flex flex-col p-2">
+					<div className="w-full">{children}</div>
 					<Dialog open={isCreateTaskOpen} onOpenChange={setIsCreateTaskOpen}>
 						<DialogTrigger asChild>
 							<Button
@@ -226,7 +158,7 @@ const DroppableColumn = memo(function DroppableColumn({
 								Add Task
 							</Button>
 						</DialogTrigger>
-						<DialogContent className="max-w-7xl w-[95vw] max-h-[90vh] overflow-y-auto">
+						<DialogContent className="max-w-6xl w-[90vw] max-h-[90vh] overflow-y-auto">
 							<DialogHeader>
 								<DialogTitle>Create New Task</DialogTitle>
 								<p className="text-sm text-gray-600">
@@ -242,6 +174,44 @@ const DroppableColumn = memo(function DroppableColumn({
 							/>
 						</DialogContent>
 					</Dialog>
+					{onDeleteColumn && (
+						<Dialog
+							open={isDeleteDialogOpen}
+							onOpenChange={setIsDeleteDialogOpen}>
+							<DialogContent className="max-w-md">
+								 {/* imp */}
+								<DialogHeader>
+									<DialogTitle>Delete Column</DialogTitle>
+									<p className="text-sm text-gray-600">
+										Are you sure you want to delete "{column.title}"? This will
+										permanently delete the column and all its tasks. This action
+										cannot be undone.
+									</p>
+								</DialogHeader>
+								<div className="flex justify-end gap-2 mt-4">
+									<Button
+										variant="outline"
+										onClick={() => setIsDeleteDialogOpen(false)}
+										disabled={isDeleting}>
+										Cancel
+									</Button>
+									<Button
+										variant="destructive"
+										onClick={handleDeleteColumn}
+										disabled={isDeleting}>
+										{isDeleting ? (
+											<>
+												<Loader2 className="mr-2 w-4 h-4 animate-spin" />
+												Deleting...
+											</>
+										) : (
+											'Delete Column'
+										)}
+									</Button>
+								</div>
+							</DialogContent>
+						</Dialog>
+					)}
 				</div>
 			</div>
 		</div>
@@ -387,7 +357,7 @@ const SortableTask = memo(function SortableTask({
 										{task.assignees.map((assignee) => (
 											<div
 												key={assignee.id}
-												className="inline-flex justify-center items-center w-6 h-6 text-xs font-semibold text-gray-600 bg-gray-50 outline  outline-gray-300 rounded-full"
+												className="inline-flex justify-center items-center w-6 h-6 text-xs font-semibold text-white bg-indigo-500 rounded-full"
 												title={assignee.name || assignee.email || 'User'}>
 												{getInitials(assignee.name, assignee.email)}
 											</div>
@@ -515,6 +485,7 @@ export default function BoardPage() {
 		moveTask,
 		updateRealColumn,
 		updateRealTask,
+		deleteRealColumn,
 		loading,
 		error,
 	} = useBoard(id);
@@ -1044,7 +1015,7 @@ export default function BoardPage() {
 
 	return (
 		<>
-			<div className="flex overflow-hidden flex-col h-screen bg-gray-50">
+			<div className="flex flex-col min-h-screen bg-gray-50">
 				<Navbar
 					boardTitle={board?.title}
 					onEditBoard={() => {
@@ -1056,7 +1027,7 @@ export default function BoardPage() {
 					filterCount={filterCount}
 				/>
 				<Dialog open={isEditngTitle} onOpenChange={setIsEditingTitle}>
-					<DialogContent className="w-[95vw] max-w-425px mx-auto">
+					<DialogContent className="max-w-md">
 						<DialogHeader>
 							<DialogTitle>Edit Board</DialogTitle>
 						</DialogHeader>
@@ -1198,7 +1169,7 @@ export default function BoardPage() {
 				</Dialog>
 
 				{/* Board Content */}
-				<main className="flex-1 flex flex-col w-full px-4 sm:px-6 lg:px-8 py-6 max-w-[1920px] mx-auto overflow-hidden">
+				<main className="flex-1 flex flex-col w-full px-4 sm:px-6 lg:px-8 py-6 max-w-[1920px] mx-auto">
 					{/* Stats */}
 					<div className="flex flex-col flex-shrink-0 gap-4 px-8 mb-6 space-y-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:space-y-0">
 						<div className="flex flex-wrap gap-4 sm:gap-6">
@@ -1251,7 +1222,7 @@ export default function BoardPage() {
 							onMouseMove={handleMouseMove}
 							onMouseUp={handleMouseUp}
 							onMouseLeave={handleMouseLeave}
-							className={`flex-1 flex flex-col lg:flex-row lg:space-x-6 lg:overflow-x-auto lg:overflow-y-hidden lg:pb-6 lg:px-2 lg:mx-2 lg:[&::-webkit-scrollbar]:h-2 lg:[&::-webkit-scrollbar-track]:bg-gray-100 lg:[&::-webkit-scrollbar-thumb]:bg-gray-300 lg:[&::-webkit-scrollbar-thumb]:rounded-full space-y-4 lg:space-y-0 min-h-0 ${
+							className={`flex flex-col lg:flex-row lg:space-x-6 lg:overflow-x-auto lg:pb-6 lg:px-2 lg:mx-2 lg:[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] space-y-4 lg:space-y-0 ${
 								isDraggingScroll ? 'lg:cursor-grabbing' : 'lg:cursor-grab'
 							}`}>
 							{filteredColumns.map((column, key) => (
@@ -1260,7 +1231,8 @@ export default function BoardPage() {
 									column={column}
 									onCreateTask={createTask}
 									onInlineSaveColumn={handleInlineSaveColumn}
-									inlineSavingColumnId={inlineSavingColumnId}>
+									inlineSavingColumnId={inlineSavingColumnId}
+									onDeleteColumn={deleteRealColumn}>
 									<SortableContext
 										items={column.tasks.map((task: Task) => task.id)}
 										strategy={verticalListSortingStrategy}>
@@ -1341,7 +1313,7 @@ export default function BoardPage() {
 			</Dialog>
 
 			<Dialog open={isEditingColumn} onOpenChange={setIsEditingColumn}>
-				<DialogContent>
+				<DialogContent className="max-w-7xl w-[95vw] max-h-[90vh] overflow-y-auto">
 					<DialogHeader>
 						<DialogTitle>Edit Column</DialogTitle>
 						<p className="text-sm text-gray-600">Update the column title.</p>
@@ -1388,7 +1360,7 @@ export default function BoardPage() {
 
 			{/* Edit Task Dialog */}
 			<Dialog open={isEditingTask} onOpenChange={setIsEditingTask}>
-				<DialogContent className="max-w-7xl w-[95vw] max-h-[90vh] overflow-y-auto">
+				<DialogContent className="max-w-6xl w-[90vw] max-h-[90vh] overflow-y-auto">
 					<DialogHeader>
 						<DialogTitle className="text-lg font-medium">Edit Task</DialogTitle>
 					</DialogHeader>

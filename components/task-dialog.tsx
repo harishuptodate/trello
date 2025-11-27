@@ -20,6 +20,7 @@ import {
 	Eye,
 	EyeClosedIcon,
 	EyeClosed,
+	User,
 } from 'lucide-react';
 import { InlineEdit } from '@/components/ui/inline-edit';
 
@@ -92,7 +93,7 @@ export function TaskDialog({
 	onClose,
 }: Props) {
 	const isEditMode = !!task?.id;
-
+	const [isOrgMembersLoaded, setIsOrgMembersLoaded] = useState(false);
 	const [orgMembers, setOrgMembers] = useState<OrgMember[]>([]);
 	const [memberSearch, setMemberSearch] = useState('');
 	const [memberResults, setMemberResults] = useState<
@@ -254,6 +255,7 @@ export function TaskDialog({
 				if (membersResponse.ok) {
 					const members = await membersResponse.json();
 					setOrgMembers(members);
+					setIsOrgMembersLoaded(true);
 				}
 			}
 		} catch (err) {
@@ -422,11 +424,8 @@ export function TaskDialog({
 	};
 
 	return (
-		<div className="grid gap-6 md:grid-cols-[1fr_1fr]">
-			<div
-				className={`grid gap-6 ${
-					isEditMode ? 'md:grid-cols-[1.2fr_1fr] lg:grid-cols-[1.3fr_1fr]' : ''
-				}`}></div>
+		<div
+			className={`grid gap-y-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] md:gap-x-4`}>
 			<form className="space-y-4" onSubmit={handleSubmit}>
 				{isEditMode ? (
 					<div className="space-y-4">
@@ -473,13 +472,13 @@ export function TaskDialog({
 				)}
 
 				<div className="space-y-3">
-					<div className="flex justify-between gap-2 items-center">
+					<div className="flex  gap-2 items-center">
 						<Label>Members</Label>
 						<div className="flex gap-2 items-center px-2 py-1 bg-white rounded-md border">
 							<Search className="w-4 h-4 text-gray-400" />
 							<input
 								type="text"
-								className=" text-sm bg-transparent outline-none"
+								className="w-full text-sm bg-transparent outline-none"
 								placeholder="Search name or email"
 								value={memberSearch}
 								onChange={(e) => setMemberSearch(e.target.value)}
@@ -522,7 +521,11 @@ export function TaskDialog({
 								<div key={id} className="relative group" title={fullName}>
 									<div className="relative inline-flex justify-center items-center w-8 h-8 text-sm font-semibold text-white bg-blue-500 rounded-full transition-colors">
 										<span className="group-hover:opacity-0 transition-opacity">
-											{getInitials(member?.name, member?.email)}
+											{isOrgMembersLoaded ? (
+												getInitials(member?.name, member?.email)
+											) : (
+												<User className="w-4 h-4" />
+											)}
 										</span>
 										<button
 											type="button"
@@ -705,33 +708,40 @@ export function TaskDialog({
 				</div>
 				{commentsOpen && (
 					<div className="space-y-4">
-						{isEditMode && (
-							<div className="space-y-3">
+						{isEditMode ? (
+							<div className="w-full">
 								<Textarea
-									className="w-full bg-blue-50 ring-2 ring-blue-200 focus-visible:ring-blue-500 focus-visible:ring-1 min-h-[80px]"
+									className="w-full bg-blue-50 ring-2 ring-blue-200 focus-visible:ring-blue-500 focus-visible:ring-1 min-h-[80px] resize-none"
 									placeholder="Write a comment..."
 									value={commentInput}
 									onChange={(e) => setCommentInput(e.target.value)}
+									onKeyDown={async (e) => {
+										if (
+											e.key === 'Enter' &&
+											!e.shiftKey &&
+											!e.ctrlKey &&
+											!e.metaKey
+										) {
+											e.preventDefault();
+											if (
+												!task?.id ||
+												!commentInput.trim() ||
+												commentSubmitting
+											)
+												return;
+											await handleAddComment();
+										}
+									}}
+									disabled={commentSubmitting}
 								/>
-								<div className="flex justify-end">
-									<Button
-										type="button"
-										size="sm"
-										onClick={handleAddComment}
-										disabled={commentSubmitting || !commentInput.trim()}>
-										{commentSubmitting ? (
-											<>
-												<Loader2 className="mr-2 w-4 h-4 animate-spin" />
-												Posting...
-											</>
-										) : (
-											'Add comment'
-										)}
-									</Button>
-								</div>
+								{commentSubmitting && (
+									<div className="flex items-center gap-2 mt-2 text-sm text-gray-500">
+										<Loader2 className="w-4 h-4 animate-spin" />
+										<span>Posting...</span>
+									</div>
+								)}
 							</div>
-						)}
-						{!isEditMode && (
+						) : (
 							<div className="text-sm text-gray-500 p-3 bg-white rounded-md border">
 								Comments will be available after the task is created.
 							</div>
@@ -746,16 +756,16 @@ export function TaskDialog({
 										: 'No comments yet.'}
 								</div>
 							) : (
-								comments.map((comment) => (
+								[...comments].reverse().map((comment) => (
 									<div
 										key={comment.id}
 										className="p-4 bg-white rounded-md border shadow-sm">
 										<div className="flex gap-3 items-start mb-2">
-											<span className="inline-flex justify-center items-center w-8 h-8 text-sm font-semibold text-white bg-blue-500 rounded-full shrink-0">
+											<span className="inline-flex justify-center items-center w-6 h-6 text-sm font-semibold text-white bg-blue-500 rounded-full shrink-0">
 												{getInitials(comment.user?.name, comment.user?.email)}
 											</span>
-											<div className="min-w-0 flex-1">
-												<p className="text-sm font-medium text-gray-900">
+											<div className="flex justify-between items-center min-w-0 flex-1">
+												<p className="text-xs font-medium text-gray-900">
 													{comment.user?.name || comment.user?.email || 'User'}
 												</p>
 												<p className="text-xs text-gray-500">
