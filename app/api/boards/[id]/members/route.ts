@@ -58,8 +58,8 @@ export async function POST(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const isAdmin =
 			(await isOrgAdmin(user.id, board.organizationId)) ||
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				await (prisma as any).boardMember.findUnique({
 					where: { boardId_userId: { boardId: id, userId: user.id } },
 				})
@@ -95,7 +95,10 @@ export async function DELETE(
 		const userId = searchParams.get('userId');
 
 		if (!userId) {
-			return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+			return NextResponse.json(
+				{ error: 'userId is required' },
+				{ status: 400 },
+			);
 		}
 
 		const board = await prisma.board.findUnique({
@@ -108,8 +111,9 @@ export async function DELETE(
 
 		const isAdmin =
 			(await isOrgAdmin(user.id, board.organizationId)) ||
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			(
-				await prisma.boardMember.findUnique({
+				await (prisma as any).boardMember.findUnique({
 					where: { boardId_userId: { boardId: id, userId: user.id } },
 				})
 			)?.role === 'ADMIN';
