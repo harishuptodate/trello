@@ -33,6 +33,8 @@ export function InlineEdit({
 	const [isSaving, setIsSaving] = useState(false);
 	const [isHovered, setIsHovered] = useState(false);
 	const editRef = useRef<HTMLFormElement | null>(null);
+	const inputRef = useRef<HTMLInputElement | null>(null);
+	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
 	useEffect(() => {
 		setDraft(value);
@@ -81,6 +83,17 @@ export function InlineEdit({
 		return () => document.removeEventListener('mousedown', handleClickOutside);
 	}, [editing, draft, value]);
 
+	useEffect(() => {
+		if (editing) {
+			// Set cursor to end of text when editing starts
+			const element = multiline ? textareaRef.current : inputRef.current;
+			if (element) {
+				const length = element.value.length;
+				element.setSelectionRange(length, length);
+			}
+		}
+	}, [editing, multiline]);
+
 	if (editing) {
 		return (
 			<form
@@ -89,6 +102,7 @@ export function InlineEdit({
 				onSubmit={handleSave}>
 				{multiline ? (
 					<Textarea
+						ref={textareaRef}
 						value={draft}
 						onChange={(e) => setDraft(e.target.value)}
 						placeholder={placeholder}
@@ -101,11 +115,17 @@ export function InlineEdit({
 					/>
 				) : (
 					<Input
+						ref={inputRef}
 						value={draft}
 						onChange={(e) => setDraft(e.target.value)}
 						placeholder={placeholder}
 						autoFocus
 						onKeyDown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								e.stopPropagation();
+								handleSave(e);
+							}
 							if (e.key === 'Escape') reset();
 						}}
 						className="flex-1 h-9 bg-blue-50 ring-2 ring-blue-200 focus-visible:ring-blue-500 focus-visible:ring-1"

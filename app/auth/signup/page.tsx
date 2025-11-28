@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
+import { signIn, useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,16 +14,32 @@ import {
 	CardTitle,
 } from '@/components/ui/card';
 import Link from 'next/link';
-import { Github } from 'lucide-react';
+import { Github, Loader2 } from 'lucide-react';
+
+const FullPageLoader = () => (
+	<div className="flex gap-2 justify-center items-center h-screen">
+				<Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+				<span className="text-lg font-medium text-gray-900">
+					Loading your boards...
+				</span>
+			</div>
+);
 
 export default function SignUpPage() {
 	const router = useRouter();
+	const { status } = useSession();
 	const [name, setName] = useState('');
 	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
 	const [confirmPassword, setConfirmPassword] = useState('');
 	const [error, setError] = useState('');
 	const [loading, setLoading] = useState(false);
+
+	useEffect(() => {
+		if (status === 'authenticated') {
+			router.replace('/dashboard');
+		}
+	}, [status, router]);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -79,6 +95,10 @@ export default function SignUpPage() {
 		setError('');
 		await signIn('github', { callbackUrl: '/dashboard' });
 	};
+
+	if (status === 'loading' || status === 'authenticated') {
+		return <FullPageLoader />;
+	}
 
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">

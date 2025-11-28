@@ -801,7 +801,7 @@ export default function DashboardPage() {
 			</Dialog>
 			{/* Delete Confirmation Dialog */}
 			<Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-				<DialogContent className="w-[95vw] max-w-425px mx-auto">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>Delete Board</DialogTitle>
 						<p className="text-sm text-gray-600">

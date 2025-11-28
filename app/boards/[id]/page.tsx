@@ -490,6 +490,35 @@ export default function BoardPage() {
 		error,
 	} = useBoard(id);
 
+	const handleTaskUpdated = useCallback(
+		(taskId: string, updatedTask: TaskDialogTask) => {
+			// Update columns state with the updated task
+			setColumns((prev) =>
+				prev.map((col) => ({
+					...col,
+					tasks: col.tasks.map((task) =>
+						task.id === taskId
+							? {
+									...task,
+									checklist: updatedTask.checklist,
+							  }
+							: task,
+					),
+				})),
+			);
+			// Update editingTask state if it's the same task
+			setEditingTask((prev) =>
+				prev?.id === taskId
+					? ({
+							...prev,
+							checklist: updatedTask.checklist,
+					  } as typeof prev)
+					: prev,
+			);
+		},
+		[setColumns],
+	);
+
 	// Ref to track latest columns state for drag handlers
 	const columnsRef = useRef(columns);
 	useEffect(() => {
@@ -629,8 +658,13 @@ export default function BoardPage() {
 				}[];
 			},
 		) => {
+			// Get the latest task data from columns to ensure we have the most up-to-date data
+			const latestTask = columns
+				.flatMap((col) => col.tasks)
+				.find((t) => t.id === task.id);
+			const taskToEdit = latestTask || task;
 			setEditingTask(
-				task as unknown as Task & {
+				taskToEdit as unknown as Task & {
 					assignee: {
 						id: string;
 						name: string | null;
@@ -641,7 +675,7 @@ export default function BoardPage() {
 			);
 			setIsEditingTask(true);
 		},
-		[],
+		[columns],
 	);
 
 	const [updatingTask, setUpdatingTask] = useState(false);
@@ -1179,7 +1213,7 @@ export default function BoardPage() {
 				</Dialog>
 
 				{/* Board Content */}
-				<main className="flex-1 flex flex-col w-full h-full min-w-0 min-h-0 px-4 sm:px-6 lg:px-8">
+				<main className="flex-1 flex flex-col w-full h-full min-w-0 min-h-0 px-4 sm:px-6 lg:px-8 pb-12">
 					{/* Stats */}
 					<div className="flex flex-col flex-shrink-0 gap-4 px-8 mb-6 space-y-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:space-y-0">
 						<div className="flex flex-wrap gap-4 sm:gap-6">
@@ -1380,6 +1414,7 @@ export default function BoardPage() {
 							boardId={board.id}
 							task={editingTask as TaskDialogTask}
 							onUpdateTask={handleUpdateTask}
+							onTaskUpdated={handleTaskUpdated}
 							onClose={() => {
 								setIsEditingTask(false);
 								setEditingTask(null);

@@ -208,7 +208,7 @@ export default function OrganizationsPage() {
 			</div>
 
 			<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-				<DialogContent>
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>Create New Organization</DialogTitle>
 					</DialogHeader>

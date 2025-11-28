@@ -81,6 +81,7 @@ type Props = {
 	task?: TaskDialogTask | null;
 	onCreateTask?: (columnId: string, taskData: TaskDialogData) => Promise<void>;
 	onUpdateTask?: (taskId: string, taskData: TaskDialogData) => Promise<void>;
+	onTaskUpdated?: (taskId: string, updatedTask: TaskDialogTask) => void;
 	onClose?: () => void;
 };
 
@@ -90,6 +91,7 @@ export function TaskDialog({
 	task,
 	onCreateTask,
 	onUpdateTask,
+	onTaskUpdated,
 	onClose,
 }: Props) {
 	const isEditMode = !!task?.id;
@@ -358,24 +360,72 @@ export function TaskDialog({
 		}
 	}, [task?.id, commentInput]);
 
+	const saveChecklist = useCallback(
+		async (updatedChecklist: ChecklistItem[]) => {
+			if (!isEditMode || !task?.id) return;
+			const validChecklist = updatedChecklist.filter(
+				(item) => item.item.trim().length > 0,
+			);
+			try {
+				const res = await fetch(`/api/tasks/${task.id}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						checklist: validChecklist.length > 0 ? validChecklist : null,
+					}),
+				});
+				if (res.ok) {
+					const updatedTask = await res.json();
+					// Notify parent component to update the task in board state
+					if (onTaskUpdated) {
+						onTaskUpdated(task.id, {
+							...task,
+							checklist: validChecklist.length > 0 ? validChecklist : null,
+						} as TaskDialogTask);
+					}
+				} else {
+					console.error('Failed to save checklist');
+				}
+			} catch (err) {
+				console.error('Failed to save checklist', err);
+			}
+		},
+		[isEditMode, task, onTaskUpdated],
+	);
+
 	const addChecklistItem = useCallback(() => {
 		setChecklist((prev) => [...prev, { item: '', completed: false }]);
 	}, []);
 
 	const updateChecklistItem = useCallback(
-		(index: number, updates: Partial<ChecklistItem>) => {
+		async (index: number, updates: Partial<ChecklistItem>) => {
 			setChecklist((prev) => {
 				const updated = [...prev];
 				updated[index] = { ...updated[index], ...updates };
+				// Save to backend immediately if in edit mode
+				if (isEditMode && task?.id) {
+					// Save the updated checklist
+					saveChecklist(updated).catch((err) => {
+						console.error('Failed to save checklist:', err);
+					});
+				}
 				return updated;
 			});
 		},
-		[],
+		[isEditMode, task?.id, saveChecklist],
 	);
 
-	const removeChecklistItem = useCallback((index: number) => {
-		setChecklist((prev) => prev.filter((_, i) => i !== index));
-	}, []);
+	const removeChecklistItem = useCallback(
+		async (index: number) => {
+			const updated = checklist.filter((_, i) => i !== index);
+			setChecklist(updated);
+			// Save to backend immediately if in edit mode
+			if (isEditMode && task?.id) {
+				saveChecklist(updated);
+			}
+		},
+		[checklist, isEditMode, task?.id, saveChecklist],
+	);
 
 	const { completedCount, totalCount, progressPercentage, isComplete } =
 		useMemo(() => {
@@ -492,6 +542,7 @@ export function TaskDialog({
 									type="button"
 									key={user.id}
 									onClick={() => toggleAssignee(user.id)}
+									title={user.email}
 									className="flex gap-2 items-center px-2 py-1 bg-white rounded-full border shadow-sm hover:bg-gray-100">
 									<span className="inline-flex justify-center items-center w-7 h-7 text-xs font-semibold text-white bg-gray-800 rounded-full">
 										{getInitials(user.name, user.email)}
@@ -519,7 +570,7 @@ export function TaskDialog({
 							const fullName = member?.name || member?.email || 'User';
 							return (
 								<div key={id} className="relative group" title={fullName}>
-									<div className="relative inline-flex justify-center items-center w-8 h-8 text-sm font-semibold text-white bg-blue-500 rounded-full transition-colors">
+									<div className="relative inline-flex justify-center items-center w-8 h-8 text-sm font-semibold text-white bg-gray-800 rounded-full transition-colors">
 										<span className="group-hover:opacity-0 transition-opacity">
 											{isOrgMembersLoaded ? (
 												getInitials(member?.name, member?.email)
