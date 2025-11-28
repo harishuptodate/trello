@@ -179,7 +179,7 @@ const DroppableColumn = memo(function DroppableColumn({
 							open={isDeleteDialogOpen}
 							onOpenChange={setIsDeleteDialogOpen}>
 							<DialogContent className="max-w-md">
-								 {/* imp */}
+								{/* imp */}
 								<DialogHeader>
 									<DialogTitle>Delete Column</DialogTitle>
 									<p className="text-sm text-gray-600">
@@ -540,7 +540,9 @@ export default function BoardPage() {
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const [isDraggingScroll, setIsDraggingScroll] = useState(false);
 	const [startX, setStartX] = useState(0);
+	const [startY, setStartY] = useState(0);
 	const [scrollLeft, setScrollLeft] = useState(0);
+	const [scrollTop, setScrollTop] = useState(0);
 
 	const sensors = useSensors(
 		useSensor(PointerSensor, {
@@ -881,7 +883,7 @@ export default function BoardPage() {
 		});
 	}, []);
 
-	// Drag-to-scroll handlers
+	// Drag-to-scroll handlers (360-degree plane)
 	const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
 		// Only start drag-to-scroll if clicking on the container itself, not on interactive elements
 		const target = e.target as HTMLElement;
@@ -906,7 +908,9 @@ export default function BoardPage() {
 			setIsDraggingScroll(true);
 			const rect = scrollContainerRef.current.getBoundingClientRect();
 			setStartX(e.pageX - rect.left);
+			setStartY(e.pageY - rect.top);
 			setScrollLeft(scrollContainerRef.current.scrollLeft);
+			setScrollTop(scrollContainerRef.current.scrollTop);
 			scrollContainerRef.current.style.userSelect = 'none';
 		}
 	}, []);
@@ -917,10 +921,13 @@ export default function BoardPage() {
 			e.preventDefault();
 			const rect = scrollContainerRef.current.getBoundingClientRect();
 			const x = e.pageX - rect.left;
-			const walk = (x - startX) * 2; // Scroll speed multiplier
-			scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+			const y = e.pageY - rect.top;
+			const walkX = (x - startX) * 2; // Scroll speed multiplier
+			const walkY = (y - startY) * 2; // Scroll speed multiplier
+			scrollContainerRef.current.scrollLeft = scrollLeft - walkX;
+			scrollContainerRef.current.scrollTop = scrollTop - walkY;
 		},
-		[isDraggingScroll, startX, scrollLeft],
+		[isDraggingScroll, startX, startY, scrollLeft, scrollTop],
 	);
 
 	const handleMouseUp = useCallback(() => {
@@ -937,15 +944,18 @@ export default function BoardPage() {
 		}
 	}, []);
 
-	// Global mouse event handlers for drag-to-scroll
+	// Global mouse event handlers for drag-to-scroll (360-degree plane)
 	useEffect(() => {
 		const handleGlobalMouseMove = (e: MouseEvent) => {
 			if (!isDraggingScroll || !scrollContainerRef.current) return;
 			e.preventDefault();
 			const rect = scrollContainerRef.current.getBoundingClientRect();
 			const x = e.pageX - rect.left;
-			const walk = (x - startX) * 2;
-			scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+			const y = e.pageY - rect.top;
+			const walkX = (x - startX) * 2;
+			const walkY = (y - startY) * 2;
+			scrollContainerRef.current.scrollLeft = scrollLeft - walkX;
+			scrollContainerRef.current.scrollTop = scrollTop - walkY;
 		};
 
 		const handleGlobalMouseUp = () => {
@@ -964,7 +974,7 @@ export default function BoardPage() {
 			document.removeEventListener('mousemove', handleGlobalMouseMove);
 			document.removeEventListener('mouseup', handleGlobalMouseUp);
 		};
-	}, [isDraggingScroll, startX, scrollLeft]);
+	}, [isDraggingScroll, startX, startY, scrollLeft, scrollTop]);
 
 	// filter columns - memoized
 	const filteredColumns = useMemo(
@@ -1015,7 +1025,7 @@ export default function BoardPage() {
 
 	return (
 		<>
-			<div className="flex flex-col min-h-screen bg-gray-50">
+			<div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
 				<Navbar
 					boardTitle={board?.title}
 					onEditBoard={() => {
@@ -1169,7 +1179,7 @@ export default function BoardPage() {
 				</Dialog>
 
 				{/* Board Content */}
-				<main className="flex-1 flex flex-col w-full px-4 sm:px-6 lg:px-8 py-6 max-w-[1920px] mx-auto">
+				<main className="flex-1 flex flex-col w-full h-full min-w-0 min-h-0">
 					{/* Stats */}
 					<div className="flex flex-col flex-shrink-0 gap-4 px-8 mb-6 space-y-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:space-y-0">
 						<div className="flex flex-wrap gap-4 sm:gap-6">
@@ -1222,8 +1232,8 @@ export default function BoardPage() {
 							onMouseMove={handleMouseMove}
 							onMouseUp={handleMouseUp}
 							onMouseLeave={handleMouseLeave}
-							className={`flex flex-col lg:flex-row lg:space-x-6 lg:overflow-x-auto lg:pb-6 lg:px-2 lg:mx-2 lg:[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] space-y-4 lg:space-y-0 ${
-								isDraggingScroll ? 'lg:cursor-grabbing' : 'lg:cursor-grab'
+							className={`flex-1 flex flex-col lg:flex-row lg:space-x-6 overflow-auto lg:pb-6 lg:px-2 lg:mx-2 lg:[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] space-y-4 lg:space-y-0 min-w-0 min-h-0 ${
+								isDraggingScroll ? 'cursor-grabbing' : 'cursor-grab'
 							}`}>
 							{filteredColumns.map((column, key) => (
 								<DroppableColumn

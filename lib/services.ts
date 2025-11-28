@@ -543,6 +543,12 @@ export const organizationService = {
 						},
 					},
 				},
+				_count: {
+					select: {
+						members: true,
+						boards: true,
+					},
+				},
 			},
 		});
 	},
