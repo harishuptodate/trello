@@ -1143,7 +1143,7 @@ export default function BoardPage() {
 					</DialogContent>
 				</Dialog>
 				<Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-					<DialogContent className="w-[95vw] max-w-425px mx-auto">
+					<DialogContent className="max-w-md">
 						<DialogHeader>
 							<DialogTitle>Filter Tasks</DialogTitle>
 							<p className="text-sm text-gray-600">

@@ -621,7 +621,7 @@ export default function DashboardPage() {
 				</div>
 			</main>
 			<Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-				<DialogContent>
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>Filter Boards</DialogTitle>
 						<p>Filter boards by title, date, or task count</p>
