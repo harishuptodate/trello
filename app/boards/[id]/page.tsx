@@ -1179,11 +1179,11 @@ export default function BoardPage() {
 				</Dialog>
 
 				{/* Board Content */}
-				<main className="flex-1 flex flex-col w-full h-full min-w-0 min-h-0">
+				<main className="flex-1 flex flex-col w-full h-full min-w-0 min-h-0 px-4 sm:px-6 lg:px-8">
 					{/* Stats */}
 					<div className="flex flex-col flex-shrink-0 gap-4 px-8 mb-6 space-y-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:space-y-0">
 						<div className="flex flex-wrap gap-4 sm:gap-6">
-							<div className="text-sm text-gray-600">
+							<div className="mt-3 text-sm text-gray-600">
 								<span className="font-medium">Total Tasks: </span>
 								{columns.reduce(
 									(sum: number, col: ColumnWithTasks) => sum + col.tasks.length,
