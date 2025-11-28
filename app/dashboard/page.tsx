@@ -723,7 +723,7 @@ export default function DashboardPage() {
 			</Dialog>
 			{/* Edit Board Dialog */}
 			<Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-				<DialogContent className="w-[95vw] max-w-425px mx-auto">
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>Edit Board</DialogTitle>
 					</DialogHeader>
