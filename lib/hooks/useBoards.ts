@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useOrganization } from '../organization-context';
-import type { Board, Column, Task } from '@prisma/client';
-import type { ColumnWithTasks, BoardWithColumns } from '../services';
-import type { TaskData } from '@/app/boards/[id]/page';
-import type { TaskWithAssignees } from '../services';
+import {
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from '@tanstack/react-query';
+import type { Board, Column } from '@prisma/client';
+import type { BoardWithColumns, ColumnWithTasks, TaskWithAssignees } from '../services';
+import type { TaskData } from '@/components/board/task-form';
 
 export type BoardType = Board & {
 	createdBy: {
@@ -14,247 +18,257 @@ export type BoardType = Board & {
 	};
 };
 
+const BOARD_STALE_TIME = 30_000;
+
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+	const response = await fetch(url, {
+		...options,
+		headers: {
+			'Content-Type': 'application/json',
+			...(options?.headers || {}),
+		},
+	});
+
+	if (!response.ok) {
+		try {
+			const error = await response.json();
+			throw new Error(error.error || error.details || 'Request failed');
+		} catch (error) {
+			if (error instanceof Error) {
+				throw error;
+			}
+			throw new Error('Request failed');
+		}
+	}
+
+	return response.json();
+}
+
+function cloneColumns(columns: ColumnWithTasks[] = []) {
+	return columns.map((column) => ({
+		...column,
+		tasks: [...column.tasks],
+	}));
+}
+
+function reorderColumnsForMove(
+	columns: ColumnWithTasks[],
+	taskId: string,
+	targetColumnId: string,
+	targetIndex: number,
+) {
+	const updatedColumns = cloneColumns(columns);
+	let taskToMove: TaskWithAssignees | undefined;
+
+	for (const column of updatedColumns) {
+		const idx = column.tasks.findIndex((task) => task.id === taskId);
+		if (idx !== -1) {
+			[taskToMove] = column.tasks.splice(idx, 1);
+			break;
+		}
+	}
+
+	const targetColumn = updatedColumns.find((col) => col.id === targetColumnId);
+	if (!taskToMove || !targetColumn) {
+		return columns;
+	}
+
+	targetColumn.tasks.splice(targetIndex, 0, {
+		...taskToMove,
+		columnId: targetColumnId,
+	});
+
+	return updatedColumns.map((column) => ({
+		...column,
+		tasks: column.tasks.map((task, index) => ({
+			...task,
+			sortOrder: index,
+		})),
+	}));
+}
+
 export function useBoards(organizationId?: string | null) {
 	const { data: session } = useSession();
 	const { selectedOrgId } = useOrganization();
 	const orgId = organizationId || selectedOrgId;
+	const queryClient = useQueryClient();
 
-	const [boards, setBoards] = useState<BoardType[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-	const cacheRef = useRef<{
-		orgId: string | null;
-		data: BoardType[];
-		timestamp: number;
-	} | null>(null);
-	const CACHE_DURATION = 30000; // 30 seconds
+	const boardsQuery = useQuery<BoardType[]>({
+		queryKey: ['boards', orgId],
+		queryFn: () =>
+			fetchJson<BoardType[]>(`/api/boards?organizationId=${orgId}`),
+		enabled: !!orgId && !!session?.user,
+		staleTime: BOARD_STALE_TIME,
+		refetchOnWindowFocus: false,
+	});
 
-	const loadBoards = useCallback(async () => {
-		if (!orgId || !session?.user) {
-			setBoards([]);
-			setLoading(false);
-			return;
-		}
+	const createBoardMutation = useMutation({
+		mutationFn: async (boardData: {
+			title: string;
+			description?: string;
+			color?: string;
+			createDefaultColumns?: boolean;
+		}) => {
+			if (!orgId || !session?.user) {
+				throw new Error('User not authenticated');
+			}
 
-		// Check cache
-		if (
-			cacheRef.current &&
-			cacheRef.current.orgId === orgId &&
-			Date.now() - cacheRef.current.timestamp < CACHE_DURATION
-		) {
-			setBoards(cacheRef.current.data);
-			setLoading(false);
-			return;
-		}
-
-		try {
-			setLoading(true);
-			setError(null);
-			const response = await fetch(`/api/boards?organizationId=${orgId}`);
-			if (!response.ok) throw new Error('Failed to load boards');
-			const data = await response.json();
-			setBoards(data);
-			// Update cache
-			cacheRef.current = { orgId, data, timestamp: Date.now() };
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to load boards.');
-			setBoards([]);
-		} finally {
-			setLoading(false);
-		}
-	}, [orgId, session]);
-
-	useEffect(() => {
-		if (orgId && session?.user) {
-			loadBoards();
-		} else if (!orgId && session?.user) {
-			// User is authenticated but no org selected
-			setBoards([]);
-			setLoading(false);
-		}
-	}, [orgId, session, loadBoards]);
-
-	async function createBoard(boardData: {
-		title: string;
-		description?: string;
-		color?: string;
-		createDefaultColumns?: boolean;
-	}) {
-		if (!orgId || !session?.user) throw new Error('User not authenticated');
-
-		try {
-			const response = await fetch('/api/boards', {
+			return fetchJson<BoardType>('/api/boards', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					...boardData,
 					organizationId: orgId,
 				}),
 			});
-
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.error || 'Failed to create board');
-			}
-
-			const newBoard = await response.json();
-			setBoards((prev) => [newBoard, ...prev]);
-			// Invalidate cache
-			if (cacheRef.current?.orgId === orgId) {
-				cacheRef.current = null;
-			}
-			return newBoard;
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to create board');
-			throw err;
-		}
-	}
-
-	async function updateBoard(boardId: string, updates: Partial<Board>) {
-		try {
-			const response = await fetch(`/api/boards/${boardId}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(updates),
-			});
-
-			if (!response.ok) throw new Error('Failed to update board');
-
-			const updatedBoard = await response.json();
-			setBoards((prev) =>
-				prev.map((board) => (board.id === boardId ? updatedBoard : board)),
+		},
+		onSuccess: (newBoard) => {
+			queryClient.setQueryData<BoardType[] | undefined>(
+				['boards', orgId],
+				(prev) => (prev ? [newBoard, ...prev] : [newBoard]),
 			);
-			// Invalidate cache
-			if (cacheRef.current?.orgId === orgId) {
-				cacheRef.current = null;
-			}
-			return updatedBoard;
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to update board');
-			throw err;
-		}
-	}
+		},
+	});
 
-	async function deleteBoard(boardId: string) {
-		try {
-			const response = await fetch(`/api/boards/${boardId}`, {
-				method: 'DELETE',
-			});
+	const updateBoardMutation = useMutation({
+		mutationFn: async ({
+			boardId,
+			updates,
+		}: {
+			boardId: string;
+			updates: Partial<Board>;
+		}) =>
+			fetchJson<BoardType>(`/api/boards/${boardId}`, {
+				method: 'PUT',
+				body: JSON.stringify(updates),
+			}),
+		onSuccess: (updatedBoard) => {
+			queryClient.setQueryData<BoardType[] | undefined>(
+				['boards', orgId],
+				(prev) =>
+					prev?.map((board) =>
+						board.id === updatedBoard.id ? updatedBoard : board,
+					) ?? prev,
+			);
+		},
+	});
 
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error('Failed to delete board' + (error.details || ''));
-			}
-
-			setBoards((prev) => prev.filter((board) => board.id !== boardId));
-			// Invalidate cache
-			if (cacheRef.current?.orgId === orgId) {
-				cacheRef.current = null;
-			}
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to delete board');
-			throw err;
-		}
-	}
+	const deleteBoardMutation = useMutation({
+		mutationFn: (boardId: string) =>
+			fetchJson(`/api/boards/${boardId}`, { method: 'DELETE' }),
+		onSuccess: (_, boardId) => {
+			queryClient.setQueryData<BoardType[] | undefined>(
+				['boards', orgId],
+				(prev) => prev?.filter((board) => board.id !== boardId) ?? prev,
+			);
+		},
+	});
 
 	return {
-		boards,
-		loading,
-		error,
-		createBoard,
-		updateBoard,
-		deleteBoard,
-		refetch: loadBoards,
+		boards: boardsQuery.data ?? [],
+		loading: boardsQuery.isPending,
+		error: boardsQuery.error
+			? boardsQuery.error instanceof Error
+				? boardsQuery.error.message
+				: 'Failed to load boards.'
+			: null,
+		createBoard: useCallback(
+			(boardData: {
+				title: string;
+				description?: string;
+				color?: string;
+				createDefaultColumns?: boolean;
+			}) => createBoardMutation.mutateAsync(boardData),
+			[createBoardMutation],
+		),
+		updateBoard: useCallback(
+			(boardId: string, updates: Partial<Board>) =>
+				updateBoardMutation.mutateAsync({ boardId, updates }),
+			[updateBoardMutation],
+		),
+		deleteBoard: useCallback(
+			(boardId: string) => deleteBoardMutation.mutateAsync(boardId),
+			[deleteBoardMutation],
+		),
+		refetch: boardsQuery.refetch,
 	};
 }
 
 export function useBoard(boardId: string) {
 	const { data: session } = useSession();
-	const [board, setBoard] = useState<BoardWithColumns | null>(null);
-	const [columns, setColumns] = useState<ColumnWithTasks[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-	const boardCacheRef = useRef<{
-		boardId: string;
-		data: BoardWithColumns;
-		timestamp: number;
-	} | null>(null);
-	const BOARD_CACHE_DURATION = 30000; // 30 seconds
+	const queryClient = useQueryClient();
+	const boardQueryKey = useMemo(() => ['board', boardId], [boardId]);
 
-	const loadBoard = useCallback(async () => {
-		if (!boardId) return;
+	const boardQuery = useQuery<BoardWithColumns>({
+		queryKey: boardQueryKey,
+		queryFn: () => fetchJson<BoardWithColumns>(`/api/boards/${boardId}/full`),
+		enabled: Boolean(boardId && session?.user),
+		staleTime: BOARD_STALE_TIME,
+		refetchOnWindowFocus: false,
+	});
 
-		// Check cache
-		if (
-			boardCacheRef.current &&
-			boardCacheRef.current.boardId === boardId &&
-			Date.now() - boardCacheRef.current.timestamp < BOARD_CACHE_DURATION
-		) {
-			const cachedData = boardCacheRef.current.data;
-			setBoard(cachedData);
-			setColumns((cachedData.columns || []) as ColumnWithTasks[]);
-			setLoading(false);
-			return;
-		}
+	const board = boardQuery.data ?? null;
+	const columns = useMemo<ColumnWithTasks[]>(
+		() => board?.columns ?? [],
+		[board?.columns],
+	);
 
-		try {
-			setLoading(true);
-			setError(null);
-			const response = await fetch(`/api/boards/${boardId}/full`);
-			if (!response.ok) throw new Error('Failed to load board');
+	const setColumns = useCallback(
+		(
+			updater:
+				| ColumnWithTasks[]
+				| ((prevColumns: ColumnWithTasks[]) => ColumnWithTasks[]),
+		) => {
+			queryClient.setQueryData<BoardWithColumns | undefined>(
+				boardQueryKey,
+				(prev) => {
+					if (!prev) return prev;
+					const currentColumns = cloneColumns(
+						(prev.columns || []) as ColumnWithTasks[],
+					);
+					const nextColumns =
+						typeof updater === 'function'
+							? (updater as (prev: ColumnWithTasks[]) => ColumnWithTasks[])(
+									currentColumns,
+							  )
+							: updater;
 
-			const fullBoard = await response.json();
-			setBoard(fullBoard);
-			setColumns((fullBoard.columns || []) as ColumnWithTasks[]);
-			// Update cache
-			boardCacheRef.current = {
-				boardId,
-				data: fullBoard,
-				timestamp: Date.now(),
-			};
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to load board.');
-		} finally {
-			setLoading(false);
-		}
-	}, [boardId]);
-
-	useEffect(() => {
-		if (boardId && session?.user) {
-			loadBoard();
-		}
-	}, [boardId, session, loadBoard]);
-
-	async function updateBoard(boardId: string, updates: Partial<Board>) {
-		try {
-			const response = await fetch(`/api/boards/${boardId}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(updates),
-			});
-
-			if (!response.ok) throw new Error('Failed to update board');
-
-			const updatedBoard = await response.json();
-			setBoard((prev) => (prev ? { ...prev, ...updatedBoard } : null));
-			// Invalidate cache
-			if (boardCacheRef.current?.boardId === boardId) {
-				boardCacheRef.current = null;
-			}
-			return updatedBoard;
-		} catch (err) {
-			setError(
-				err instanceof Error ? err.message : 'Failed to update the board.',
+					return { ...prev, columns: nextColumns };
+				},
 			);
-			throw err;
-		}
-	}
+		},
+		[boardQueryKey, queryClient],
+	);
 
-	async function createRealTask(columnId: string, taskData: TaskData) {
-		try {
-			const response = await fetch('/api/tasks', {
+	const updateBoardMutation = useMutation({
+		mutationFn: async ({
+			boardId,
+			updates,
+		}: {
+			boardId: string;
+			updates: Partial<Board>;
+		}) =>
+			fetchJson<BoardWithColumns>(`/api/boards/${boardId}`, {
+				method: 'PUT',
+				body: JSON.stringify(updates),
+			}),
+		onSuccess: (updatedBoard) => {
+			queryClient.setQueryData<BoardWithColumns | undefined>(
+				boardQueryKey,
+				(prev) => (prev ? { ...prev, ...updatedBoard } : prev),
+			);
+		},
+	});
+
+	const createTaskMutation = useMutation({
+		mutationFn: async ({
+			columnId,
+			taskData,
+		}: {
+			columnId: string;
+			taskData: TaskData;
+		}) =>
+			fetchJson<TaskWithAssignees>('/api/tasks', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					...taskData,
 					columnId,
@@ -262,201 +276,323 @@ export function useBoard(boardId: string) {
 					sortOrder:
 						columns.find((col) => col.id === columnId)?.tasks.length || 0,
 				}),
-			});
+			}),
+	});
 
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.details || 'Failed to create task');
-			}
+	const moveTaskMutation = useMutation({
+		mutationFn: ({
+			taskId,
+			newColumnId,
+			newSortOrder,
+		}: {
+			taskId: string;
+			newColumnId: string;
+			newSortOrder: number;
+		}) =>
+			fetchJson(`/api/tasks/${taskId}/move`, {
+				method: 'PUT',
+				body: JSON.stringify({ newColumnId, newSortOrder }),
+			}),
+	});
 
-			const newTask = await response.json();
-			setColumns((prev) =>
-				prev.map((col) =>
+	const createColumnMutation = useMutation({
+		mutationFn: (columnData: { title: string; sortOrder: number }) =>
+			fetchJson<Column>(`/api/columns`, {
+				method: 'POST',
+				body: JSON.stringify({
+					...columnData,
+					boardId,
+				}),
+			}),
+	});
+
+	const updateColumnMutation = useMutation({
+		mutationFn: ({ columnId, title }: { columnId: string; title: string }) =>
+			fetchJson<Column>(`/api/columns/${columnId}`, {
+				method: 'PUT',
+				body: JSON.stringify({ title }),
+			}),
+	});
+
+	const updateTaskMutation = useMutation({
+		mutationFn: ({
+			taskId,
+			updates,
+		}: {
+			taskId: string;
+			updates: Partial<TaskWithAssignees>;
+		}) =>
+			fetchJson<TaskWithAssignees>(`/api/tasks/${taskId}`, {
+				method: 'PUT',
+				body: JSON.stringify(updates),
+			}),
+	});
+
+	const deleteColumnMutation = useMutation({
+		mutationFn: (columnId: string) =>
+			fetchJson(`/api/columns/${columnId}`, { method: 'DELETE' }),
+	});
+
+	const updateBoard = useCallback(
+		(targetBoardId: string, updates: Partial<Board>) =>
+			updateBoardMutation.mutateAsync({ boardId: targetBoardId, updates }),
+		[updateBoardMutation],
+	);
+
+	const createRealTask = useCallback(
+		async (columnId: string, taskData: TaskData) => {
+			const previousBoard = queryClient.getQueryData<BoardWithColumns | undefined>(
+				boardQueryKey,
+			);
+			const targetSort =
+				previousBoard?.columns.find((col) => col.id === columnId)?.tasks.length ??
+				0;
+			const tempId = `temp-task-${Date.now()}`;
+			const now = new Date();
+			const optimisticTask: TaskWithAssignees = {
+				id: tempId,
+				title: taskData.title,
+				description: taskData.description ?? null,
+				dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
+				priority: (taskData.priority ?? 'medium').toUpperCase() as
+					| 'LOW'
+					| 'MEDIUM'
+					| 'HIGH',
+				checklist: taskData.checklist ?? null,
+				sortOrder: targetSort,
+				columnId,
+				createdAt: now,
+				assignees: [],
+				comments: [],
+			};
+
+			setColumns((prevColumns) =>
+				prevColumns.map((col) =>
 					col.id === columnId
-						? { ...col, tasks: [...col.tasks, newTask] }
+						? { ...col, tasks: [...col.tasks, optimisticTask] }
 						: col,
 				),
 			);
-			// Invalidate cache
-			if (boardCacheRef.current?.boardId === boardId) {
-				boardCacheRef.current = null;
-			}
-			return newTask;
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to create task.');
-			throw err;
-		}
-	}
 
-	async function moveTask(
-		taskId: string,
-		newColumnId: string,
-		newSortOrder: number,
-	) {
-		try {
-			const response = await fetch(`/api/tasks/${taskId}/move`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ newColumnId, newSortOrder }),
-			});
+			try {
+				const createdTask = await createTaskMutation.mutateAsync({
+					columnId,
+					taskData,
+				});
 
-			if (!response.ok) throw new Error('Failed to move task');
+				setColumns((prevColumns) =>
+					prevColumns.map((col) =>
+						col.id === columnId
+							? {
+									...col,
+									tasks: col.tasks.map((task) =>
+										task.id === tempId ? createdTask : task,
+									),
+							  }
+							: col,
+					),
+				);
 
-			setColumns((prev) => {
-				const newColumns = [...prev];
-				let taskToMove: Task | null = null;
-
-				for (const col of newColumns) {
-					const taskIndex = col.tasks.findIndex((task) => task.id === taskId);
-					if (taskIndex !== -1) {
-						taskToMove = col.tasks[taskIndex];
-						col.tasks.splice(taskIndex, 1);
-						break;
-					}
+				return createdTask;
+			} catch (error) {
+				if (previousBoard) {
+					queryClient.setQueryData(boardQueryKey, previousBoard);
 				}
-
-				if (taskToMove) {
-					const targetColumn = newColumns.find((col) => col.id === newColumnId);
-					if (targetColumn) {
-						targetColumn.tasks.splice(
-							newSortOrder,
-							0,
-							taskToMove as unknown as Task & {
-								assignees: {
-									id: string;
-									name: string | null;
-									email: string;
-									image: string | null;
-								}[];
-							},
-						);
-					}
-				}
-
-				return newColumns;
-			});
-			// Invalidate cache
-			if (boardCacheRef.current?.boardId === boardId) {
-				boardCacheRef.current = null;
+				throw error;
+			} finally {
+				queryClient.invalidateQueries({ queryKey: boardQueryKey });
 			}
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to move task.');
-			throw err;
-		}
-	}
+		},
+		[boardQueryKey, createTaskMutation, queryClient, setColumns],
+	);
 
-	async function createRealColumn(columnTitle: string) {
-		if (!boardId || !board) throw new Error('Board not loaded');
-		try {
-			const response = await fetch('/api/columns', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
+	const moveTask = useCallback(
+		async (taskId: string, newColumnId: string, newSortOrder: number) => {
+			const previousBoard = queryClient.getQueryData<BoardWithColumns | undefined>(
+				boardQueryKey,
+			);
+
+			setColumns((prevColumns) =>
+				reorderColumnsForMove(prevColumns, taskId, newColumnId, newSortOrder),
+			);
+
+			try {
+				await moveTaskMutation.mutateAsync({
+					taskId,
+					newColumnId,
+					newSortOrder,
+				});
+			} catch (error) {
+				if (previousBoard) {
+					queryClient.setQueryData(boardQueryKey, previousBoard);
+				}
+				throw error;
+			} finally {
+				queryClient.invalidateQueries({ queryKey: boardQueryKey });
+			}
+		},
+		[boardQueryKey, moveTaskMutation, queryClient, setColumns],
+	);
+
+	const createRealColumn = useCallback(
+		async (columnTitle: string) => {
+			if (!boardId || !board) throw new Error('Board not loaded');
+			const previousBoard =
+				queryClient.getQueryData<BoardWithColumns | undefined>(boardQueryKey);
+			const tempId = `temp-column-${Date.now()}`;
+			const now = new Date();
+
+			setColumns((prevColumns) => [
+				...prevColumns,
+				{
+					id: tempId,
+					title: columnTitle,
+					sortOrder: prevColumns.length,
+					boardId,
+					createdAt: now,
+					tasks: [],
+				},
+			]);
+
+			try {
+				const newColumn = await createColumnMutation.mutateAsync({
 					title: columnTitle,
 					sortOrder: columns.length,
-					boardId: boardId,
-				}),
-			});
+				});
 
-			if (!response.ok) throw new Error('Failed to create column');
-
-			const newColumn = await response.json();
-			setColumns((prev) => [...prev, { ...newColumn, tasks: [] }]);
-			// Invalidate cache
-			if (boardCacheRef.current?.boardId === boardId) {
-				boardCacheRef.current = null;
+				setColumns((prevColumns) =>
+					prevColumns.map((col) =>
+						col.id === tempId ? { ...newColumn, tasks: [] } : col,
+					),
+				);
+				return newColumn;
+			} catch (error) {
+				if (previousBoard) {
+					queryClient.setQueryData(boardQueryKey, previousBoard);
+				}
+				throw error;
+			} finally {
+				queryClient.invalidateQueries({ queryKey: boardQueryKey });
 			}
-			return newColumn;
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to create column.');
-			throw err;
-		}
-	}
+		},
+		[
+			boardId,
+			board,
+			boardQueryKey,
+			columns.length,
+			createColumnMutation,
+			queryClient,
+			setColumns,
+		],
+	);
 
-	async function updateRealColumn(columnId: string, title: string) {
-		try {
-			const response = await fetch(`/api/columns/${columnId}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ title }),
-			});
+	const updateRealColumn = useCallback(
+		async (columnId: string, title: string) => {
+			const previousBoard =
+				queryClient.getQueryData<BoardWithColumns | undefined>(boardQueryKey);
 
-			if (!response.ok) throw new Error('Failed to update column');
-
-			const updatedColumn = await response.json();
-			setColumns((prev) =>
-				prev.map((col) =>
-					col.id === columnId ? { ...col, ...updatedColumn } : col,
-				),
+			setColumns((prevColumns) =>
+				prevColumns.map((col) => (col.id === columnId ? { ...col, title } : col)),
 			);
-			// Invalidate cache
-			if (boardCacheRef.current?.boardId === boardId) {
-				boardCacheRef.current = null;
+
+			try {
+				const updatedColumn = await updateColumnMutation.mutateAsync({
+					columnId,
+					title,
+				});
+
+				setColumns((prevColumns) =>
+					prevColumns.map((col) =>
+						col.id === columnId ? { ...col, ...updatedColumn } : col,
+					),
+				);
+				return updatedColumn;
+			} catch (error) {
+				if (previousBoard) {
+					queryClient.setQueryData(boardQueryKey, previousBoard);
+				}
+				throw error;
+			} finally {
+				queryClient.invalidateQueries({ queryKey: boardQueryKey });
 			}
-			return updatedColumn;
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to update column.');
-			throw err;
-		}
-	}
+		},
+		[boardQueryKey, queryClient, setColumns, updateColumnMutation],
+	);
 
-	async function updateRealTask(
-		taskId: string,
-		updates: Partial<TaskWithAssignees>,
-	) {
-		try {
-			const response = await fetch(`/api/tasks/${taskId}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(updates),
-			});
+	const updateRealTask = useCallback(
+		async (taskId: string, updates: Partial<TaskWithAssignees>) => {
+			const previousBoard =
+				queryClient.getQueryData<BoardWithColumns | undefined>(boardQueryKey);
 
-			if (!response.ok) throw new Error('Failed to update task');
-
-			const updatedTask = await response.json();
-			setColumns((prev) =>
-				prev.map((col) => ({
+			setColumns((prevColumns) =>
+				prevColumns.map((col) => ({
 					...col,
 					tasks: col.tasks.map((task) =>
-						task.id === taskId ? updatedTask : task,
+						task.id === taskId ? { ...task, ...updates } : task,
 					),
 				})),
 			);
-			// Invalidate cache
-			if (boardCacheRef.current?.boardId === boardId) {
-				boardCacheRef.current = null;
+
+			try {
+				const updatedTask = await updateTaskMutation.mutateAsync({
+					taskId,
+					updates,
+				});
+
+				setColumns((prevColumns) =>
+					prevColumns.map((col) => ({
+						...col,
+						tasks: col.tasks.map((task) =>
+							task.id === taskId ? updatedTask : task,
+						),
+					})),
+				);
+
+				return updatedTask;
+			} catch (error) {
+				if (previousBoard) {
+					queryClient.setQueryData(boardQueryKey, previousBoard);
+				}
+				throw error;
+			} finally {
+				queryClient.invalidateQueries({ queryKey: boardQueryKey });
 			}
-			return updatedTask;
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to update task.');
-			throw err;
-		}
-	}
+		},
+		[boardQueryKey, queryClient, setColumns, updateTaskMutation],
+	);
 
-	async function deleteRealColumn(columnId: string) {
-		try {
-			const response = await fetch(`/api/columns/${columnId}`, {
-				method: 'DELETE',
-			});
+	const deleteRealColumn = useCallback(
+		async (columnId: string) => {
+			const previousBoard =
+				queryClient.getQueryData<BoardWithColumns | undefined>(boardQueryKey);
 
-			if (!response.ok) throw new Error('Failed to delete column');
+			setColumns((prevColumns) =>
+				prevColumns.filter((column) => column.id !== columnId),
+			);
 
-			setColumns((prev) => prev.filter((col) => col.id !== columnId));
-			// Invalidate cache
-			if (boardCacheRef.current?.boardId === boardId) {
-				boardCacheRef.current = null;
+			try {
+				await deleteColumnMutation.mutateAsync(columnId);
+			} catch (error) {
+				if (previousBoard) {
+					queryClient.setQueryData(boardQueryKey, previousBoard);
+				}
+				throw error;
+			} finally {
+				queryClient.invalidateQueries({ queryKey: boardQueryKey });
 			}
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to delete column.');
-			throw err;
-		}
-	}
+		},
+		[boardQueryKey, deleteColumnMutation, queryClient, setColumns],
+	);
 
 	return {
 		board,
 		columns,
-		loading,
-		error,
+		loading: boardQuery.isPending,
+		error: boardQuery.error
+			? boardQuery.error instanceof Error
+				? boardQuery.error.message
+				: 'Failed to load board.'
+			: null,
 		updateBoard,
 		createRealTask,
 		createRealColumn,
@@ -465,6 +601,6 @@ export function useBoard(boardId: string) {
 		updateRealColumn,
 		updateRealTask,
 		deleteRealColumn,
-		refetch: loadBoard,
+		refetch: boardQuery.refetch,
 	};
 }

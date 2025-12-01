@@ -866,7 +866,7 @@ export default function BoardPage() {
 				</main>
 			</div>
 			<Dialog open={isCreatingColumn} onOpenChange={setIsCreatingColumn}>
-				<DialogContent>
+				<DialogContent className="max-w-md">
 					<DialogHeader>
 						<DialogTitle>Create New Column</DialogTitle>
 						<p className="text-sm text-gray-600">
