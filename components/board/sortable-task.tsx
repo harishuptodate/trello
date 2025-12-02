@@ -92,6 +92,12 @@ export const SortableTask = memo(function SortableTask({
 							<h4 className="flex-1 pr-2 min-w-0 text-sm font-medium leading-tight text-gray-900">
 								{task.title}
 							</h4>
+							<div
+								title={task.priority.toLowerCase() as 'low' | 'medium' | 'high' === 'high' ? 'High Priority' : task.priority.toLowerCase() as 'low' | 'medium' | 'high' === 'medium' ? 'Medium Priority' : 'Low Priority'}
+									className={`w-4 h-4 rounded-full shrink-0 bg-amoeba ${getPriorityColor(
+										task.priority.toLowerCase() as 'low' | 'medium' | 'high',
+									)}`}
+								/>
 						</div>
 
 						{task.description ? (
@@ -125,18 +131,20 @@ export const SortableTask = memo(function SortableTask({
 
 						<div className="flex justify-between items-center">
 							<div className="flex items-center space-x-1 min-w-0 sm:space-x-2">
-								<UserIcon className="w-4 h-4 shrink-0" />
 								{task.assignees && task.assignees.length > 0 && (
-									<div className="flex items-center gap-1">
-										{task.assignees.map((assignee) => (
-											<div
-												key={assignee.id}
-												className="inline-flex justify-center items-center w-6 h-6 text-xs font-semibold text-white bg-indigo-500 rounded-full"
-												title={assignee.name || assignee.email || 'User'}>
-												{getInitials(assignee.name, assignee.email)}
-											</div>
-										))}
-									</div>
+									<>
+										<UserIcon className="w-4 h-4 shrink-0" />
+										<div className="flex items-center gap-1">
+											{task.assignees.map((assignee) => (
+												<div
+													key={assignee.id}
+													className="inline-flex justify-center items-center w-6 h-6 text-xs font-semibold text-white bg-indigo-500 rounded-full"
+													title={assignee.name || assignee.email || 'User'}>
+													{getInitials(assignee.name, assignee.email)}
+												</div>
+											))}
+										</div>
+									</>
 								)}
 							</div>
 							<div className="flex items-center space-x-1 sm:space-x-2">
@@ -148,11 +156,6 @@ export const SortableTask = memo(function SortableTask({
 										</span>
 									</div>
 								)}
-								<div
-									className={`w-2 h-2 rounded-full shrink-0 ${getPriorityColor(
-										task.priority.toLowerCase() as 'low' | 'medium' | 'high',
-									)}`}
-								/>
 							</div>
 						</div>
 					</div>

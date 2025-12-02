@@ -51,14 +51,14 @@ export const DroppableColumn = memo(function DroppableColumn({
 	return (
 		<div
 			ref={setNodeRef}
-			className={`w-full lg:flex-shrink-0 lg:w-80 ${
+			className={`w-full lg:shrink-0 lg:w-80 ${
 				isOver ? 'bg-blue-50' : ''
 			}`}>
 			<div
 				className={`bg-white rounded-lg shadow-sm border flex flex-col ${
 					isOver ? 'ring-2 ring-blue-300' : ''
 				}`}>
-				<div className="flex-shrink-0 p-3 border-b sm:p-4 group">
+				<div className="shrink-0 p-3 border-b sm:p-4 group">
 					<div className="flex items-center justify-between gap-2">
 						<div className="flex-1 min-w-0 flex items-center gap-2">
 							<InlineEdit
@@ -81,7 +81,7 @@ export const DroppableColumn = memo(function DroppableColumn({
 								</Button>
 							)}
 						</div>
-						<Badge variant="secondary" className="flex-shrink-0 text-xs">
+						<Badge variant="secondary" className="shrink-0 text-xs">
 							{column.tasks.length}
 						</Badge>
 					</div>
@@ -93,7 +93,7 @@ export const DroppableColumn = memo(function DroppableColumn({
 						<DialogTrigger asChild>
 							<Button
 								variant="secondary"
-								className="flex-shrink-0 mt-3 w-full text-gray-500 hover:text-gray-700">
+								className="shrink-0 mt-3 w-full text-gray-500 hover:text-gray-700">
 								<Plus />
 								Add Task
 							</Button>
