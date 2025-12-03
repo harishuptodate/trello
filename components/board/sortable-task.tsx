@@ -4,7 +4,7 @@ import { memo, useCallback, useMemo } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Card, CardContent } from '@/components/ui/card';
-import { Calendar, Check, User as UserIcon } from 'lucide-react';
+import { Calendar, Check, User as UserIcon, UsersIcon } from 'lucide-react';
 import type { TaskWithAssignees } from '@/lib/services';
 import { ChecklistItem } from '@/components/task-dialog';
 
@@ -93,11 +93,21 @@ export const SortableTask = memo(function SortableTask({
 								{task.title}
 							</h4>
 							<div
-								title={task.priority.toLowerCase() as 'low' | 'medium' | 'high' === 'high' ? 'High Priority' : task.priority.toLowerCase() as 'low' | 'medium' | 'high' === 'medium' ? 'Medium Priority' : 'Low Priority'}
-									className={`w-4 h-4 rounded-full shrink-0 bg-amoeba ${getPriorityColor(
-										task.priority.toLowerCase() as 'low' | 'medium' | 'high',
-									)}`}
-								/>
+								title={
+									(task.priority.toLowerCase() as 'low' | 'medium' | 'high') ===
+									'high'
+										? 'High Priority'
+										: (task.priority.toLowerCase() as
+												| 'low'
+												| 'medium'
+												| 'high') === 'medium'
+										? 'Medium Priority'
+										: 'Low Priority'
+								}
+								className={`w-4 h-4 rounded-full shrink-0 bg-amoeba ${getPriorityColor(
+									task.priority.toLowerCase() as 'low' | 'medium' | 'high',
+								)}`}
+							/>
 						</div>
 
 						{task.description ? (
@@ -133,7 +143,11 @@ export const SortableTask = memo(function SortableTask({
 							<div className="flex items-center space-x-1 min-w-0 sm:space-x-2">
 								{task.assignees && task.assignees.length > 0 && (
 									<>
-										<UserIcon className="w-4 h-4 shrink-0" />
+										{task.assignees.length > 1 ? (
+											<UsersIcon className="w-4 h-4 shrink-0" />
+										) : (
+											<UserIcon className="w-4 h-4 shrink-0" />
+										)}
 										<div className="flex items-center gap-1">
 											{task.assignees.map((assignee) => (
 												<div
