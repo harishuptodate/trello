@@ -786,7 +786,7 @@ export default function BoardPage() {
 				</Dialog>
 
 				{/* Board Content */}
-				<main className="flex-1 flex flex-col w-full h-full min-w-0 min-h-0 px-4 sm:px-6 lg:px-8 pb-12">
+				<main className="flex-1 flex flex-col w-full h-full min-w-0 min-h-0">
 					{/* Stats */}
 					<div className="flex flex-col shrink-0 gap-4 px-8 mb-6 space-y-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:space-y-0">
 						<div className="flex flex-wrap gap-4 sm:gap-6">
@@ -839,9 +839,13 @@ export default function BoardPage() {
 							onMouseMove={handleMouseMove}
 							onMouseUp={handleMouseUp}
 							onMouseLeave={handleMouseLeave}
-							className={`flex-1 flex flex-col lg:flex-row lg:space-x-6 overflow-auto lg:pb-6 lg:px-2 lg:mx-2 lg:[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] space-y-4 lg:space-y-0 min-w-0 min-h-0 ${
+							className={`flex-1 flex flex-col lg:flex-row lg:space-x-6 overflow-auto lg:pb-6 lg:px-2 lg:mx-2 lg:[&::-webkit-scrollbar:vertical]:hidden lg:[&::-webkit-scrollbar:horizontal]:block lg:[&::-webkit-scrollbar:horizontal]:h-2 lg:[&::-webkit-scrollbar-track]:bg-gray-100 lg:[&::-webkit-scrollbar-thumb]:bg-gray-400 lg:[&::-webkit-scrollbar-thumb]:rounded-full lg:[&::-webkit-scrollbar-thumb]:hover:bg-gray-500 [-ms-overflow-style:-ms-autohiding-scrollbar] [scrollbar-width:thin] space-y-4 lg:space-y-0 min-w-0 min-h-0 ${
 								isDraggingScroll ? 'cursor-grabbing' : 'cursor-grab'
-							}`}>
+							}`}
+							style={{
+								scrollbarColor: '#e5e7eb transparent',
+							}}
+							>
 							{filteredColumns.map((column, key) => (
 								<DroppableColumn
 									key={key}

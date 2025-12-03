@@ -810,11 +810,11 @@ export function TaskDialog({
 										key={comment.id}
 										className="p-4 bg-white rounded-md border shadow-sm">
 										<div className="flex gap-3 items-start mb-2">
-											<span className="inline-flex justify-center items-center w-6 h-6 text-sm font-semibold text-white bg-blue-500 rounded-full shrink-0">
+											<span className="inline-flex justify-center items-center w-6 h-6 text-xs font-semibold text-white bg-blue-500 rounded-full shrink-0">
 												{getInitials(comment.user?.name, comment.user?.email)}
 											</span>
 											<div className="flex justify-between items-center min-w-0 flex-1">
-												<p className="text-xs font-medium text-gray-900">
+												<p className="text-sm font-medium text-gray-900">
 													{comment.user?.name || comment.user?.email || 'User'}
 												</p>
 												<p className="text-xs text-gray-500">

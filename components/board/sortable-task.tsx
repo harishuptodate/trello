@@ -85,11 +85,12 @@ export const SortableTask = memo(function SortableTask({
 					e.stopPropagation();
 					onEditTask?.(task);
 				}}
-				className="transition-shadow cursor-pointer hover:shadow-md">
+				className="transition-shadow py-2 cursor-pointer hover:shadow-md">
 				<CardContent>
 					<div className="space-y-1 sm:space-y-2">
 						<div className="flex justify-between items-center">
-							<h4 className="flex-1 pr-2 min-w-0 text-sm font-medium leading-tight text-gray-900">
+
+							<h4 className="flex-1 pt-1.5 pr-2 min-w-0 text-sm font-medium leading-tight text-gray-900">
 								{task.title}
 							</h4>
 							<div
@@ -104,7 +105,7 @@ export const SortableTask = memo(function SortableTask({
 										? 'Medium Priority'
 										: 'Low Priority'
 								}
-								className={`w-4 h-4 rounded-full shrink-0 bg-amoeba ${getPriorityColor(
+								className={`w-4 h-4 rounded-full shrink-0 mt-2 ${getPriorityColor(
 									task.priority.toLowerCase() as 'low' | 'medium' | 'high',
 								)}`}
 							/>
