@@ -569,25 +569,23 @@ export function TaskDialog({
 								memberResults.find((m) => m.id === id);
 							const fullName = member?.name || member?.email || 'User';
 							return (
-								<div key={id} className="relative group" title={fullName}>
-									<div className="relative inline-flex justify-center items-center w-8 h-8 text-sm font-semibold text-white bg-gray-800 rounded-full transition-colors">
-										<span className="group-hover:opacity-0 transition-opacity">
-											{isOrgMembersLoaded ? (
-												getInitials(member?.name, member?.email)
-											) : (
-												<User className="w-4 h-4" />
-											)}
-										</span>
-										<button
-											type="button"
-											onClick={(e) => {
-												e.stopPropagation();
-												toggleAssignee(id);
-											}}
-											className="absolute inset-0 flex justify-center items-center bg-blue-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-600">
-											<CloseIcon className="w-3 h-3" />
-										</button>
+								<div key={id} className="relative group flex items-center bg-gray-800 rounded-full" title={fullName}>
+									<div className="inline-flex justify-center items-center w-8 h-8 text-sm font-semibold text-white bg-gray-800 rounded-full transition-all">
+										{isOrgMembersLoaded ? (
+											getInitials(member?.name, member?.email)
+										) : (
+											<User className="w-4 h-4" />
+										)}
 									</div>
+									<button
+										type="button"
+										onClick={(e) => {
+											e.stopPropagation();
+											toggleAssignee(id);
+										}}
+										className="flex justify-center items-center w-0 h-8 bg-gray-800 rounded-r-full opacity-0 group-hover:w-8 group-hover:opacity-100 transition-all duration-200 hover:bg-gray-700 overflow-hidden">
+										<CloseIcon className="w-4 h-4 text-white" />
+									</button>
 								</div>
 							);
 						})}
@@ -673,7 +671,7 @@ export function TaskDialog({
 													completed: e.target.checked,
 												})
 											}
-											className="flex-shrink-0 w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+											className="shrink-0 w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
 										/>
 										{isEditMode ? (
 											<InlineEdit
@@ -705,7 +703,7 @@ export function TaskDialog({
 											variant="ghost"
 											size="sm"
 											onClick={() => removeChecklistItem(index)}
-											className="flex-shrink-0 text-red-500 hover:text-red-700">
+											className="shrink-0 text-red-500 hover:text-red-700">
 											<Trash2 className="w-4 h-4" />
 										</Button>
 									</div>
