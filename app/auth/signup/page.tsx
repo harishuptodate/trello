@@ -45,6 +45,16 @@ export default function SignUpPage() {
 		e.preventDefault();
 		setError('');
 
+		if (name.trim().length > 15) {
+			setError('Name must be less than 15 characters');
+			return;
+		}
+
+		if (name.trim().length < 2) {
+			setError('Name must be at least 2 characters');
+			return;
+		}
+
 		if (password !== confirmPassword) {
 			setError('Passwords do not match');
 			return;
