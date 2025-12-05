@@ -535,23 +535,30 @@ export function TaskDialog({
 							/>
 						</div>
 					</div>
-					{memberResults.length > 0 && (
+					{memberResults.filter((user) => !assigneeIds.includes(user.id)).length > 0 && (
 						<div className="flex flex-wrap gap-2 p-2 bg-gray-50 rounded-md border">
-							{memberResults.map((user) => (
-								<button
-									type="button"
-									key={user.id}
-									onClick={() => toggleAssignee(user.id)}
-									title={user.email}
-									className="flex gap-2 items-center px-2 py-1 bg-white rounded-full border shadow-sm hover:bg-gray-100">
-									<span className="inline-flex justify-center items-center w-7 h-7 text-xs font-semibold text-white bg-gray-800 rounded-full">
-										{getInitials(user.name, user.email)}
-									</span>
-									<span className="text-sm">
-										{user.name || user.email || 'User'}
-									</span>
-								</button>
-							))}
+							{memberResults
+								.filter((user) => !assigneeIds.includes(user.id))
+								.map((user) => (
+									<button
+										type="button"
+										key={user.id}
+										onClick={() => toggleAssignee(user.id)}
+										title={`${user.name || 'User'}\n${user.email}`}
+										className="flex gap-2 items-center px-2 py-1 bg-white rounded-full border shadow-sm hover:bg-gray-100">
+										<span className="inline-flex justify-center items-center w-7 h-7 text-xs font-semibold text-white bg-gray-800 rounded-full">
+											{getInitials(user.name, user.email)}
+										</span>
+										<div className="flex flex-col items-start">
+											<span className="text-sm font-medium">
+												{user.name || 'User'}
+											</span>
+											<span className="text-xs text-gray-500">
+												{user.email}
+											</span>
+										</div>
+									</button>
+								))}
 						</div>
 					)}
 					{searchingMembers && (
@@ -567,9 +574,10 @@ export function TaskDialog({
 							const member =
 								orgMembers.find((m) => m.user.id === id)?.user ||
 								memberResults.find((m) => m.id === id);
-							const fullName = member?.name || member?.email || 'User';
+							const fullName = member?.name || 'User';
+							const email = member?.email || '';
 							return (
-								<div key={id} className="relative group flex items-center bg-gray-800 rounded-full" title={fullName}>
+								<div key={id} className="relative group flex items-center bg-gray-800 rounded-full" title={`${fullName}\n${email}`}>
 									<div className="inline-flex justify-center items-center w-8 h-8 text-sm font-semibold text-white bg-gray-800 rounded-full transition-all">
 										{isOrgMembersLoaded ? (
 											getInitials(member?.name, member?.email)
@@ -579,6 +587,7 @@ export function TaskDialog({
 									</div>
 									<button
 										type="button"
+										title={`Remove '${fullName}'`}
 										onClick={(e) => {
 											e.stopPropagation();
 											toggleAssignee(id);
