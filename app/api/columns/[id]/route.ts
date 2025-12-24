@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-utils';
 import { columnService } from '@/lib/services';
-import { hasBoardAccess, hasOrgAccess } from '@/lib/auth-rules';
+import { hasBoardAccess, hasOrgAccess, isOrgAdmin } from '@/lib/auth-rules';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(
@@ -91,8 +91,8 @@ export async function DELETE(
 		}
 
 		// Verify user has access to the organization
-		const hasAdmin = await hasOrgAccess(user.id, column.board.organizationId);
-		if (!hasAdmin) {
+		const isAdmin = await isOrgAdmin(user.id, column.board.organizationId);
+		if (!isAdmin) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
