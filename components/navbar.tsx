@@ -29,6 +29,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useOrganization } from '@/lib/organization-context';
 import { useRef, useCallback } from 'react';
+import BordiaSVG from '@/svg/bordia-svg';
 
 type NavbarProps = {
 	boardTitle?: string;
@@ -256,10 +257,12 @@ export default function Navbar({
 						<Link href="/">
 							{/* Logo */}
 							<div className="flex items-center space-x-2 shrink-0">
-								<Trello className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-								<span className="text-lg sm:text-xl font-bold text-gray-900">
-									Trello
-								</span>
+									{/* @ts-ignore */}
+
+								<BordiaSVG className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
+								<span className="text-xl sm:text-2xl font-bold text-gray-700">
+							Bordia
+						</span>
 							</div>
 						</Link>
 						{/* Center: Search Bar + Create Button */}
@@ -344,7 +347,9 @@ export default function Navbar({
 							</Link>
 						</div>
 						<div className="flex items-center space-x-1 sm:space-x-2 min-w-0 absolute left-1/2 transform -translate-x-1/2">
-							<Trello className="text-blue-600 shrink-0" />
+									{/* @ts-ignore */}
+
+							<BordiaSVG className=" w-3 h-3 sm:w-8 sm:h-8" />
 							<div className="flex items-center space-x-1 sm:space-x-2 min-w-0">
 								<span className="text-lg font-bold text-gray-900 truncate">
 									{boardTitle}
@@ -403,9 +408,10 @@ export default function Navbar({
 			<div className="w-full px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between">
 				<Link href="/">
 					<div className="flex items-center space-x-2">
-						<Trello className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
-						<span className="text-xl sm:text-2xl font-bold text-gray-900">
-							Trello
+									{/* @ts-ignore */}
+						<BordiaSVG className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
+						<span className="text-xl sm:text-2xl font-bold text-gray-700">
+							Bordia
 						</span>
 					</div>
 				</Link>

@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-	title: 'Trello Clone',
-	description: 'A Trello-like project management application',
+	title: 'Bordia',
+	description: 'A Bordia-like project management application',
 };
 
 export default function RootLayout({

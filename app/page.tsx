@@ -16,7 +16,7 @@ export default function Home() {
 			<main className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)] px-4">
 				<div className="text-center max-w-2xl">
 					<h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-gray-900 mb-4">
-						Welcome to Trello Clone
+						Welcome to Bordia
 					</h1>
 					<p className="text-lg sm:text-xl text-gray-700 mb-8">
 						Organize your projects, collaborate with your team, and get things
