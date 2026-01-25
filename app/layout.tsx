@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-	title: 'Bordia',
-	description: 'A Bordia-like project management application',
+	title: 'Bordia - Kanban Board Project Management',
+	description: 'Streamline your workflow with Bordia\'s intuitive Kanban board system. Organize tasks, collaborate with your team, and boost productivity with visual project management.',
 };
 
 export default function RootLayout({
