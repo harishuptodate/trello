@@ -35,11 +35,13 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { isOrgAdmin } from '@/lib/auth-rules';
+import { useOrganization } from '@/lib/organization-context';
 
 export default function OrganizationPage() {
 	const { data: session } = useSession();
 	const params = useParams();
 	const router = useRouter();
+	const { setSelectedOrgId } = useOrganization();
 	const orgId = params.id as string;
 
 	const [organization, setOrganization] = useState<any>(null);
@@ -216,6 +218,11 @@ export default function OrganizationPage() {
 		[orgId, loadOrganization],
 	);
 
+	const handleCardClick = useCallback(() => {
+		setSelectedOrgId(orgId);
+		router.push('/dashboard');
+	}, [orgId, setSelectedOrgId, router]);
+
 	if (loading) {
 		return (
 			<div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -256,7 +263,9 @@ export default function OrganizationPage() {
 						</Button>
 					</Link>
 
-					<Card className="mb-6">
+					<Card 
+						className="mb-6 cursor-pointer hover:shadow-md transition-shadow"
+						onClick={handleCardClick}>
 						<CardHeader>
 							<div className="flex items-center justify-between">
 								<div className="flex items-center space-x-2">

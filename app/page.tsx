@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { useSession } from 'next-auth/react';
-
+import Image from 'next/image';
+import bordiaFont from '@/public/Bordia_Font.png';
 export default function Home() {
 	const { data: session } = useSession();
 	const isLoggedIn = !!session;
@@ -16,7 +17,8 @@ export default function Home() {
 			<main className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)] px-4">
 				<div className="text-center max-w-2xl">
 					<h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-gray-900 mb-4">
-						Welcome to Bordia
+						Welcome <br /> to <br />
+						<Image src={bordiaFont} alt="Bordia" className="w-auto h-[1.8em] inline-block" />
 					</h1>
 					<p className="text-lg sm:text-xl text-gray-700 mb-8">
 						Organize your projects, collaborate with your team, and get things

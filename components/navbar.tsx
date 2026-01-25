@@ -30,6 +30,8 @@ import { usePathname } from 'next/navigation';
 import { useOrganization } from '@/lib/organization-context';
 import { useRef, useCallback } from 'react';
 import BordiaSVG from '@/svg/bordia-svg';
+import Image from 'next/image';
+import bordiaFont from '@/public/Bordia_Font.png';
 
 type NavbarProps = {
 	boardTitle?: string;
@@ -261,7 +263,7 @@ export default function Navbar({
 
 								<BordiaSVG className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
 								<span className="text-xl sm:text-2xl font-bold text-gray-700">
-							Bordia
+								<Image src={bordiaFont} alt="Bordia" className="w-auto mb-1 ml-1 h-[0.8em] sm:h-[1em] inline-block" />
 						</span>
 							</div>
 						</Link>
@@ -411,7 +413,7 @@ export default function Navbar({
 									{/* @ts-ignore */}
 						<BordiaSVG className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
 						<span className="text-xl sm:text-2xl font-bold text-gray-700">
-							Bordia
+							<Image src={bordiaFont} alt="Bordia" className="w-auto mb-1 ml-1 h-[0.8em] sm:h-[1em] inline-block" />
 						</span>
 					</div>
 				</Link>
