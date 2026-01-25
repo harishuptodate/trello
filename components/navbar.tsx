@@ -1,11 +1,9 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
 	ArrowLeft,
-	ArrowRight,
 	Filter,
 	MoreHorizontal,
-	Trello,
 	Search,
 	Plus,
 	LogOut,
@@ -79,6 +77,19 @@ export default function Navbar({
 	const isSignedIn = !!session;
 
 	const currentOrgId = selectedOrgId || contextOrgId;
+
+	const bordiaImage = useMemo(
+		() => (
+			<Image
+				src={bordiaFont}
+				alt="Bordia"
+				className="w-auto mb-1 ml-1 h-[0.8em] sm:h-[1em] inline-block"
+				priority
+				unoptimized
+			/>
+		),
+		[],
+	);
 
 	const computeDisplayName = () => {
 		if (session?.user?.name) return session.user.name;
@@ -263,7 +274,7 @@ export default function Navbar({
 
 								<BordiaSVG className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
 								<span className="text-xl sm:text-2xl font-bold text-gray-700">
-								<Image src={bordiaFont} alt="Bordia" className="w-auto mb-1 ml-1 h-[0.8em] sm:h-[1em] inline-block" />
+								{bordiaImage}
 						</span>
 							</div>
 						</Link>
@@ -413,7 +424,7 @@ export default function Navbar({
 									{/* @ts-ignore */}
 						<BordiaSVG className="h-6 w-6 sm:w-8 sm:h-8 text-blue-600" />
 						<span className="text-xl sm:text-2xl font-bold text-gray-700">
-							<Image src={bordiaFont} alt="Bordia" className="w-auto mb-1 ml-1 h-[0.8em] sm:h-[1em] inline-block" />
+							{bordiaImage}
 						</span>
 					</div>
 				</Link>

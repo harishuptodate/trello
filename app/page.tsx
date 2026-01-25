@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import Navbar from '@/components/navbar';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -7,9 +8,23 @@ import { ArrowRight } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 import bordiaFont from '@/public/Bordia_Font.png';
+
 export default function Home() {
 	const { data: session } = useSession();
 	const isLoggedIn = !!session;
+
+	const bordiaImage = useMemo(
+		() => (
+			<Image
+				src={bordiaFont}
+				alt="Bordia"
+				className="w-auto h-[1.8em] inline-block"
+				priority
+				unoptimized
+			/>
+		),
+		[],
+	);
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-blue-500 via-white to-purple-500">
@@ -18,7 +33,7 @@ export default function Home() {
 				<div className="text-center max-w-2xl">
 					<h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-gray-900 mb-4">
 						Welcome <br /> to <br />
-						<Image src={bordiaFont} alt="Bordia" className="w-auto h-[1.8em] inline-block" />
+						{bordiaImage}
 					</h1>
 					<p className="text-lg sm:text-xl text-gray-700 mb-8">
 						Organize your projects, collaborate with your team, and get things
